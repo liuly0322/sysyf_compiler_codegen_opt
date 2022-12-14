@@ -1,0 +1,45 @@
+label_entry
+in:
+k 
+out:
+k 
+label_ret
+in:
+op14 
+out:
+
+label10
+in:
+k 
+out:
+k 
+label13
+in:
+k op40 
+out:
+op14 
+label15
+in:
+k op41 
+out:
+k op40 
+label20
+in:
+k op40 
+out:
+k op22 
+label27
+in:
+k op40 
+out:
+k op40 
+label29
+in:
+k op22 
+out:
+k op37 
+label38
+in:
+k op22 op37 
+out:
+k op41 

@@ -1,0 +1,72 @@
+int n;
+int a[10];
+int QuickSort(int low, int high)
+{
+    if (low < high)
+    {
+        int i;
+        i = low;
+        int j;
+        j = high;
+        int k;
+        k = a[low];
+        while (i < j)
+        {
+            while(i < j)
+            {
+                if (a[j] > k - 1)
+                    j = j - 1;
+                else
+                    break;
+            }
+
+            if(i < j)
+            {
+                a[i] = a[j];
+                i = i + 1;
+            }
+ 
+            while(i < j)
+            {
+                if (a[i] < k)
+                    i = i + 1;
+                else
+                    break;
+            }
+
+            if(i < j)
+            {
+                a[j] = a[i];
+                j = j - 1;
+            }
+        }
+ 
+        a[i] = k;
+        int tmp;
+        tmp = i - 1;
+        tmp = QuickSort(low, tmp);
+        tmp = i + 1;
+        tmp = QuickSort(tmp, high);
+    }
+    return 0;
+}
+
+int main(){
+    n = 10;
+    a[0]=4;a[1]=3;a[2]=9;a[3]=2;a[4]=0;
+    a[5]=1;a[6]=6;a[7]=5;a[8]=7;a[9]=8;
+    int i;
+    i = 0;
+    int tmp;
+    tmp = 9;
+    i = QuickSort(i, tmp);
+    while (i < n) {
+        int tmp;
+        tmp = a[i];
+        putint(tmp);
+        tmp = 10;
+        putch(tmp);
+        i = i + 1;
+    }
+    return 0;
+}

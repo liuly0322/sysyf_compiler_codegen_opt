@@ -1,0 +1,12 @@
+int a;
+
+int inc_a(){
+    a = a + 1;
+    return a - 1;
+}
+
+int main(){
+    if (inc_a())
+        ;
+    return a;
+}

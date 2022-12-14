@@ -1,0 +1,23 @@
+int x[1] = {1}, y[1] = {1};
+int exgcd(int a,int b) {
+	if(b == 0) {
+		x[0] = 1;
+		y[0] = 0; 
+		return a;			
+	}
+	else {
+		int r = exgcd(b, a % b);		
+		int t = x[0];
+		x[0] = y[0];
+		y[0] = (t - a / b * y[0]);
+		return r;
+	}
+} 
+
+int main() {
+	int a = 7, b = 15;
+	exgcd(a, b);
+	x[0] = (x[0] % b + b) % b;
+	putint(x[0]);
+	return 0;
+}

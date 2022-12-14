@@ -1,0 +1,16 @@
+const int arr[5] = {1,3,4,2};
+int a = 0;
+
+int main(){
+    int cnt = 0;
+    while (a < arr[a]) {
+        a = arr[a];
+        if (arr[a + arr[a] - 1] > arr[a] - 1.5) {
+            cnt = arr[cnt] + 1;
+        } else {
+            break;
+            return 1;
+        }
+    }
+    return cnt;
+}

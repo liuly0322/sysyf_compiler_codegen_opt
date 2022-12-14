@@ -1,0 +1,45 @@
+label_entry
+in:
+arg1 
+out:
+arg1 
+label_ret
+in:
+arg1 op26 op29 
+out:
+
+label13
+in:
+arg1 
+out:
+arg1 
+label14
+in:
+arg1 
+out:
+arg1 
+label15
+in:
+arg1 op22 
+out:
+op29 
+label20
+in:
+op29 
+out:
+op22 
+label23
+in:
+op29 
+out:
+op26 op29 
+label_entry
+in:
+a 
+out:
+op5 
+label_ret
+in:
+op5 
+out:
+

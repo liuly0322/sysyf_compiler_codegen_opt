@@ -1,0 +1,40 @@
+label_entry
+in:
+arg0 arg1 arg2 arg3 arg4 arg5 arg6 arg7 
+out:
+op31 
+label_ret
+in:
+op31 
+out:
+
+label_entry
+in:
+arg0 arg1 arg10 arg11 arg12 arg13 arg14 arg15 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9 
+out:
+op63 
+label_ret
+in:
+op63 
+out:
+
+label_entry
+in:
+arg0 arg1 arg10 arg11 arg12 arg13 arg14 arg15 arg16 arg17 arg18 arg19 arg2 arg20 arg21 arg22 arg23 arg24 arg25 arg26 arg27 arg28 arg29 arg3 arg30 arg31 arg4 arg5 arg6 arg7 arg8 arg9 
+out:
+op127 
+label_ret
+in:
+op127 
+out:
+
+label_entry
+in:
+
+out:
+
+label_ret
+in:
+
+out:
+

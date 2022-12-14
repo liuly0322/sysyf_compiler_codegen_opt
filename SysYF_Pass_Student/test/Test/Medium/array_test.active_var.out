@@ -1,0 +1,45 @@
+label_entry
+in:
+arg0 arg1 
+out:
+op7 
+label_ret
+in:
+op7 
+out:
+
+label_entry
+in:
+a arr 
+out:
+a arr 
+label_ret
+in:
+op38 
+out:
+
+label3
+in:
+a arr op46 
+out:
+a arr op45 
+label11
+in:
+a arr op45 
+out:
+a arr op45 
+label32
+in:
+a arr op45 
+out:
+op38 
+label39
+in:
+a arr op45 
+out:
+a arr op43 
+label44
+in:
+a arr op43 op45 
+out:
+a arr op46 

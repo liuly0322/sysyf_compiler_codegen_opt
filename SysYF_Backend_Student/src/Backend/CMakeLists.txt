@@ -1,0 +1,13 @@
+ADD_LIBRARY(
+        Backend
+        RegAlloc.cpp
+        CodeGen.cpp
+        IR2asm.cpp
+        InstGen.cpp
+        StackOperations.cpp
+        FunCallOperations.cpp
+        TempRegHandle.cpp
+        DataMoving.cpp
+        PhiGen.cpp
+        StackAlloc.cpp
+)
