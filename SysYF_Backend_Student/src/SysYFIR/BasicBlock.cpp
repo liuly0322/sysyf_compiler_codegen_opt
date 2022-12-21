@@ -63,6 +63,10 @@ const Instruction *BasicBlock::get_terminator() const
         return instr_list_.back();
         break;
 
+    case Instruction::cmpbr:
+        return instr_list_.back();
+        break;
+
     default:
         return nullptr;
         break;
