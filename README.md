@@ -33,12 +33,12 @@
 
 ### 选做部分
 
-你需要在以下选题中选择一个来做。选择后需要在[select.txt](select.txt)中填写数字标号
-- 1表示进阶优化
-- 2表示运行时空间管理和代码生成
-- 3表示自由发挥
+你需要在以下数字中选择一个，填在[select.txt](select.txt)中。
+- 1表示进阶优化，或者其他基于SysYF进行硬件无关优化的自由发挥；
+- 2表示运行时空间管理和代码生成，或者其他基于SysYF进行ARM相关优化的自由发挥；
+- 3表示其他不基于SysYF的自由发挥，由于评测条件的限制，建议进行兼容x86/64架构的优化。
 
-[select.txt](select.txt)将被[eval.sh](eval.sh)用于自动选择项目进行评测。
+[select.txt](select.txt)将被用于自动选择项目进行评测。
 
 #### 选题1-进阶优化
 
@@ -69,9 +69,9 @@
 
 ### 评测说明
 
-- **请勿修改根目录下的[eval.sh](eval.sh)**，但是你需要修改相应选题下的`eval.sh`
-- 根目录下的[eval.sh](eval.sh)将自动调用相应选做部分的评测脚本，选做部分的评测脚本编写说明见相应选题部分。
-- 根目录下的[eval.sh](eval.sh)可以在本地环境通过`bash eval.sh`执行。
+- 你需要修改相应选题下的评测脚本，对于选择为1或3的同学，需要修改[SysYF_Pass_Student/test/student/eval.sh](SysYF_Pass_Student/test/student/eval.sh) 或 [FreeStyle/test/student/eval.sh](FreeStyle/test/student/eval.sh); 对于选择为2的同学，需要修改[SysYF_Backend_Student/test/student/build_asm.sh](SysYF_Backend_Student/test/student/build_asm.sh) , [SysYF_Backend_Student/test/student/run_exec.sh](SysYF_Backend_Student/test/student/run_exec.sh) 。
+- 选做部分的评测脚本编写说明见相应选题部分。
+- 自动评测的结果将写在对应选题文件夹下的`test/student/run_result.txt`中。
 
 ### 本实验设计及软件包的研发者
 
