@@ -6,6 +6,7 @@
   - [必做-Part3](#必做-part3)
   - [必做-Part4](#必做-part4)
   - [使用Log输出程序信息](#使用log输出程序信息)
+  - [报告要求](#报告要求)
 
 # 必做部分
 
@@ -163,8 +164,12 @@
 
 - **任务4-1**
 
-  - **B4-1**. 基于你对LLVM IR Module的理解，在[include/Optimize/Check.h](include/Optimize/Check.h)和[src/Optimize/Check.cpp](src/Optimize/Check.cpp)中编写相应的约定验证代码，并在[main.cpp](src/main.cpp)或其他合适的位置插入相应的代码来利用你所写的检查器检查是否满足约定。将你检查的内容记录在报告中，并说明检查理由。将检查器插入的位置记录在报告中，说明理由。
+  - **B4-1**. 基于你对LLVM IR Module的理解，在[include/Optimize/Check.h](include/Optimize/Check.h)和[src/Optimize/Check.cpp](src/Optimize/Check.cpp)中编写相应的约定验证代码，并在[main.cpp](src/main.cpp)或其他合适的位置插入相应的代码来利用你所写的检查器检查是否满足约定。将你检查的内容记录在报告中，并说明检查理由。将检查器插入的代码位置记录在报告中，说明理由。
 
 ## 使用Log输出程序信息
 
 该部分文档见[logging.md](doc/logging.md)。
+
+## 报告要求
+
+请在[doc/report.md](doc/report.md)中编写对**Bx-y**的回答
