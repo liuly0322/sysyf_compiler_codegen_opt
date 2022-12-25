@@ -1,6 +1,6 @@
 label_entry
 in:
-arg0 arg1 c 
+arg0 arg1 
 out:
 
 label_ret
@@ -10,7 +10,7 @@ out:
 
 label_entry
 in:
-a b c 
+
 out:
 op3 
 label_ret

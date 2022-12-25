@@ -1,8 +1,8 @@
 label_entry
 in:
-a arr 
+
 out:
-a arr 
+
 label_ret
 in:
 
@@ -10,14 +10,14 @@ out:
 
 label3
 in:
-a arr 
+
 out:
-a arr 
+
 label11
 in:
-a arr 
+
 out:
-a arr 
+
 label32
 in:
 
@@ -25,11 +25,11 @@ out:
 
 label34
 in:
-a arr 
+
 out:
-a arr 
+
 label35
 in:
-a arr 
+
 out:
-a arr 
+

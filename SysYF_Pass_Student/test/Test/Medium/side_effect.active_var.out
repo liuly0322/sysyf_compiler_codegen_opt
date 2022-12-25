@@ -1,6 +1,6 @@
 label_entry
 in:
-a 
+
 out:
 op4 
 label_ret
@@ -10,9 +10,9 @@ out:
 
 label_entry
 in:
-a 
+
 out:
-a 
+
 label_ret
 in:
 op12 op14 
@@ -20,7 +20,7 @@ out:
 
 label11
 in:
-a 
+
 out:
 op12 
 label13

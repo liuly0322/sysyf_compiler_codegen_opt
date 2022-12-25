@@ -1,8 +1,8 @@
 label_entry
 in:
-ans n sum 
+
 out:
-ans n 
+
 label_ret
 in:
 
@@ -10,14 +10,14 @@ out:
 
 label3
 in:
-ans n op23 
+op23 
 out:
-ans n op24 
+op24 
 label9
 in:
-ans n op24 
+op24 
 out:
-ans n op24 
+op24 
 label18
 in:
 
@@ -30,19 +30,19 @@ out:
 
 label20
 in:
-ans n op24 
+op24 
 out:
-ans n op24 
+op24 
 label21
 in:
-ans n op24 
+op24 
 out:
-ans n op23 
+op23 
 label_entry
 in:
-ans arg0 line1 line2 n row 
+arg0 
 out:
-ans arg0 line1 line2 n row 
+arg0 
 label_ret
 in:
 
@@ -50,14 +50,14 @@ out:
 
 label3
 in:
-ans arg0 line1 line2 n op28 row 
+arg0 op28 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label9
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label16
 in:
 
@@ -65,49 +65,49 @@ out:
 
 label17
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label26
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op28 row 
+arg0 op28 
 label29
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label40
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label41
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label50
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label51
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label52
 in:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 out:
-ans arg0 line1 line2 n op79 row 
+arg0 op79 
 label_entry
 in:
-n sum 
+
 out:
-n op2 sum 
+op2 
 label_ret
 in:
 op14 
@@ -115,16 +115,16 @@ out:
 
 label4
 in:
-n op12 op2 sum 
+op12 op2 
 out:
-n op15 sum 
+op15 
 label9
 in:
-n op15 sum 
+op15 
 out:
-n op12 sum 
+op12 
 label13
 in:
-sum 
+
 out:
 op14 

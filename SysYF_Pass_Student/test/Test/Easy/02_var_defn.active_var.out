@@ -1,6 +1,6 @@
 label_entry
 in:
-a b 
+
 out:
 op10 
 label_ret

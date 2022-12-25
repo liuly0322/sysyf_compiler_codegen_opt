@@ -1,8 +1,8 @@
 label_entry
 in:
-program 
+
 out:
-op2 program 
+op2 
 label_ret
 in:
 
@@ -10,24 +10,24 @@ out:
 
 label3
 in:
-op14 op2 program 
+op14 op2 
 out:
-op18 op2 program 
+op18 op2 
 label9
 in:
-op18 op2 program 
+op18 op2 
 out:
-op14 op2 program 
+op14 op2 
 label15
 in:
-op18 program 
+op18 
 out:
 
 label_entry
 in:
-program ptr tape 
+
 out:
-program ptr tape 
+
 label_ret
 in:
 
@@ -35,14 +35,14 @@ out:
 
 label3
 in:
-op124 op125 op27 program ptr tape 
+op124 op125 op27 
 out:
-op120 op121 program ptr tape 
+op120 op121 
 label8
 in:
-op120 op121 program ptr tape 
+op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label16
 in:
 
@@ -50,154 +50,154 @@ out:
 
 label17
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label20
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label25
 in:
-op11 op120 op121 op126 op127 op128 program ptr tape 
+op11 op120 op121 op126 op127 op128 
 out:
-op124 op125 op27 program ptr tape 
+op124 op125 op27 
 label28
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label31
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label36
 in:
-op11 op120 op121 op129 op130 op131 program ptr tape 
+op11 op120 op121 op129 op130 op131 
 out:
-op126 op127 op128 program ptr tape 
+op126 op127 op128 
 label37
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label44
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label49
 in:
-op11 op120 op121 op132 op133 op134 program ptr tape 
+op11 op120 op121 op132 op133 op134 
 out:
-op129 op130 op131 program ptr tape 
+op129 op130 op131 
 label50
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label57
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label62
 in:
-op11 op120 op121 op135 op136 op137 program ptr tape 
+op11 op120 op121 op135 op136 op137 
 out:
-op132 op133 op134 program ptr tape 
+op132 op133 op134 
 label63
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label67
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label72
 in:
-op11 op120 op121 op138 op139 op140 program ptr tape 
+op11 op120 op121 op138 op139 op140 
 out:
-op135 op136 op137 program ptr tape 
+op135 op136 op137 
 label73
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label77
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label82
 in:
-op11 op120 op121 op141 op142 op143 program ptr tape 
+op11 op120 op121 op141 op142 op143 
 out:
-op138 op139 op140 program ptr tape 
+op138 op139 op140 
 label83
 in:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 out:
-op11 op120 op121 program ptr tape 
+op11 op120 op121 
 label88
 in:
-op11 op120 op121 op144 op145 op146 program ptr tape 
+op11 op120 op121 op144 op145 op146 
 out:
-op141 op142 op143 program ptr tape 
+op141 op142 op143 
 label89
 in:
-op11 op120 program ptr tape 
+op11 op120 
 out:
-op11 op120 program ptr tape 
+op11 op120 
 label90
 in:
-op11 op120 op121 op147 op148 op149 program ptr tape 
+op11 op120 op121 op147 op148 op149 
 out:
-op144 op145 op146 program ptr tape 
+op144 op145 op146 
 label91
 in:
-op101 op11 op120 op150 op98 program ptr tape 
+op101 op11 op120 op150 op98 
 out:
-op147 op148 op149 program ptr tape 
+op147 op148 op149 
 label96
 in:
-op147 op148 program ptr tape 
+op147 op148 
 out:
-op101 op148 op98 program ptr tape 
+op101 op148 op98 
 label106
 in:
-op147 op148 op149 program ptr tape 
+op147 op148 op149 
 out:
-op147 op148 op149 program ptr tape 
+op147 op148 op149 
 label107
 in:
-op101 op148 op98 program ptr tape 
+op101 op148 op98 
 out:
-op101 op109 op98 program ptr tape 
+op101 op109 op98 
 label110
 in:
-op101 op148 op98 program ptr tape 
+op101 op148 op98 
 out:
-op101 op148 op98 program ptr tape 
+op101 op148 op98 
 label115
 in:
-op101 op109 op151 op98 program ptr tape 
+op101 op109 op151 op98 
 out:
-op101 op150 op98 program ptr tape 
+op101 op150 op98 
 label116
 in:
-op101 op148 op98 program ptr tape 
+op101 op148 op98 
 out:
-op101 op118 op98 program ptr tape 
+op101 op118 op98 
 label119
 in:
-op101 op118 op148 op98 program ptr tape 
+op101 op118 op148 op98 
 out:
-op101 op151 op98 program ptr tape 
+op101 op151 op98 
 label_entry
 in:
 

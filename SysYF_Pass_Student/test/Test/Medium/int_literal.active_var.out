@@ -1,8 +1,8 @@
 label_entry
 in:
-arg0 arg1 arg2 s 
+arg0 arg1 arg2 
 out:
-arg0 s 
+arg0 
 label_ret
 in:
 op20 
@@ -10,12 +10,12 @@ out:
 
 label14
 in:
-arg0 s 
+arg0 
 out:
-arg0 s 
+arg0 
 label15
 in:
-arg0 s 
+arg0 
 out:
 op20 
 label_entry

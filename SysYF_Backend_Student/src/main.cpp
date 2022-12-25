@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
                 if(cse){
                     // passmgr.addPass<ComSubExprEli>();
                 }
-                if(av){
+                if(av || emit_assembly){ // HurryPeng: emit_assembly depends on ActiveVar! 
                     passmgr.addPass<ActiveVar>();
                 }
             }

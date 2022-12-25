@@ -35,7 +35,7 @@ out:
 op26 op29 
 label_entry
 in:
-a 
+
 out:
 op5 
 label_ret
