@@ -10,14 +10,14 @@ out:
 
 label8
 in:
-arg0 op23 op6 
+arg0 op23 op26 op6 
 out:
 arg0 op26 
 label15
 in:
 arg0 op26 
 out:
-arg0 op23 
+arg0 op23 op26 
 label24
 in:
 op26 

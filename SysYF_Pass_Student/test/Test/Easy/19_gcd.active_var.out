@@ -20,14 +20,14 @@ out:
 op20 op34 op35 
 label21
 in:
-op20 op31 op34 op35 
+op20 op31 op34 op35 op36 op37 
 out:
 op36 op37 
 label26
 in:
 op36 op37 
 out:
-op31 
+op31 op36 op37 
 label32
 in:
 op37 
