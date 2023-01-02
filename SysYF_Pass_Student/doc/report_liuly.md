@@ -28,13 +28,15 @@ $x$ 和 $y$ 在支配树上都是 $b$ 的祖先结点，因此要么 $x$ 支配 
 
 `Figure 1: The Iterative Dominator Algorithm` 的内层 `for` 循环是否一定要以后序遍历的逆序进行，为什么？
 
-对于正向数据流分析，需要保证每次循环中，在访问某个结点前，该结点的所有前驱结点都被访问过。也就是找出一个拓扑排序。因此逆后序是一个有效的策略，如果以其他的拓扑排序顺序遍历，也是可以的。
+不一定，因为循环判断条件是 `Changed` 变量，当未发生改变时，说明已经达到了不动点，也即找到了一个解。
+
+后序遍历的逆序的好处是尽可能减少收敛需要的速度（对于 DAG 图，就是拓扑排序，一次即可收敛）。
 
 #### B1-3
 
 `Figure 3: The Engineered Algorithm` 为计算支配树的算法。在其上半部分的迭代计算中，内层的 `for` 循环是否一定要以后序遍历的逆序进行，为什么？
 
-与上个问题结论类似，只需要遍历顺序是一个拓扑排序即可。
+与上个问题结论类似，并不一定需要后序遍历的逆序。
 
 #### B1-4
 
@@ -73,6 +75,65 @@ for (auto bb: f->get_basic_blocks()) {
 ### Mem2Reg
 
 #### B2-1
+
+请说明`Mem2Reg`优化遍的流程。
+
+##### 概述
+
+消除 store 与 load，修改为 SSA 的 def-use/use-def 关系，并且在适当的位置安插 Phi 和 进行变量重命名，再删除 alloca 指令。
+
+条件：n 支配 m 的一个前驱且 n 并不严格支配 m，则说 m 在 n 的支配边界内，即 m 是 n 在 cfg 上可达但并不支配的第一个结点。则在 m 插入 phi 函数。
+
+##### isLocalVarOp 函数
+
+用于判断是否是需要被优化的 load/store op
+
+- 是 load/store op
+- 左值不是全局变量也不是数组指针
+
+##### execute 函数
+
+省略初始化：
+
+```cpp
+// 内部 load 转发
+insideBlockForwarding();
+genPhi();
+valueDefineCounting();
+valueForwarding(func_->get_entry_block());
+// 删除所有的变量 alloca 指令（不包含数组）
+removeAlloc();
+```
+
+##### insideBlockForwarding 函数
+
+可以认为，对于一个变量（非数组）而言，store 定值，load 使用。消除 load 的过程就是将 load op 替换（forward）为对应地址的值，这需要 store 的信息。
+
+有些 load op 只依赖于基本块内部的 store op，这个函数会消除这些 load/store。
+
+这个函数首先遍历所有的变量（非数组） load/store 指令。
+
+访问 store op 时维护如下信息：
+
+- defined_list: 地址到 store 指令的映射
+- new_value: 地址到值的映射
+- delete_list: 需要删除的 store 指令（对于某个地址，非最后一条的 store 指令（因为最后一条 store 指令可能后续基本块还需要使用））
+
+处理过程中需要注意，如果 store 的 rval 是被 forward 的 load op，需要替换为 forward 后的值。
+
+访问 load op 时维护如下信息：
+
+- forward_list: load op forward 到值
+
+如果加载的地址之前已经有某条 store，forward_list 就可以增添 load op 到当前地址值的映射（根据 new_value）。
+
+对于 store 指令：
+
+在遍历完 load/store 指令后，进行替换：对于所有能 forward 的 load op，在用到的地方都替换为值。
+
+这时，所有被 forward 的 load 指令和 delete_list 中的 store 指令也可以删除了。
+
+##### genPhi 函数
 
 #### B2-2
 
