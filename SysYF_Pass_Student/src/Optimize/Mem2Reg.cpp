@@ -2,66 +2,72 @@
 #include "IRBuilder.h"
 
 void Mem2Reg::execute() {
-    // ¶ÔmoduleÖĞËùÓĞµÄº¯Êı¶¼Ö´ĞĞÕâ¸öÓÅ»¯±é
+    // å¯¹moduleä¸­æ‰€æœ‰çš„å‡½æ•°éƒ½æ‰§è¡Œè¿™ä¸ªä¼˜åŒ–é
     for (auto fun : module->get_functions()) {
-        // Èç¹ûº¯ÊıÃ»ÓĞ»ù±¾¿é£¬ÔòÌø¹ı´Ëº¯Êı£¬²»Ö´ĞĞÓÅ»¯
+        // å¦‚æœå‡½æ•°æ²¡æœ‰åŸºæœ¬å—ï¼Œåˆ™è·³è¿‡æ­¤å‡½æ•°ï¼Œä¸æ‰§è¡Œä¼˜åŒ–
         if (fun->get_basic_blocks().empty()) continue;
         func_ = fun;
-        // ÏÂÃæÕâÁ½¸öÊÇMem2RegµÄÈ«¾Ö±äÁ¿£¬ÔÚ¶ÔĞÂµÄº¯Êı½øĞĞÓÅ»¯Ö®Ç°ĞèÒªÇå¿Õ
+        // ä¸‹é¢è¿™ä¸¤ä¸ªæ˜¯Mem2Regçš„å…¨å±€å˜é‡ï¼Œåœ¨å¯¹æ–°çš„å‡½æ•°è¿›è¡Œä¼˜åŒ–ä¹‹å‰éœ€è¦æ¸…ç©º
         lvalue_connection.clear();
         no_union_set.clear();
-        // É¾³ı²»±ØÒªµÄloadºÍstoreÖ¸Áî
+        // åœ¨åŸºæœ¬å—å†…å‰è¿›
         insideBlockForwarding();
-        // ·ÅÖÃ¦Õº¯Êı
+        // æ”¾ç½®Ï†å‡½æ•°
         genPhi();
-        // ÎªÃ¿¸ö»ù±¾¿éÉèÖÃÃû×Ö
+        // ä¸ºæ¯ä¸ªåŸºæœ¬å—è®¾ç½®åå­—
         module->set_print_name();
-        // ¼ÇÂ¼¶¨Öµ
+        // è®°å½•å®šå€¼
         valueDefineCounting();
-        // ´«²¥£¿ÊÇ´Óº¯ÊıµÄÈë¿Ú»ù±¾¿é¿ªÊ¼µÄ
+        // ä¼ æ’­ï¼Ÿæ˜¯ä»å‡½æ•°çš„å…¥å£åŸºæœ¬å—å¼€å§‹çš„
         valueForwarding(func_->get_entry_block());
-        // ÒÆ³ıallocaÖ¸Áî
+        // ç§»é™¤allocaæŒ‡ä»¤
         removeAlloc();
     }
 }
 
 void Mem2Reg::insideBlockForwarding() {
-    // ¶Ôº¯ÊıµÄËùÓĞ»ù±¾¿é½øĞĞ´Ë²Ù×÷
+    // å¯¹å‡½æ•°çš„æ‰€æœ‰åŸºæœ¬å—è¿›è¡Œæ­¤æ“ä½œ
     for (auto bb : func_->get_basic_blocks()) {
-        // ¶ÔÄ³×óÖµ¶¨ÖµµÄÖ¸ÁîÁĞ±í
+        // å¯¹æŸå·¦å€¼å®šå€¼çš„æŒ‡ä»¤åˆ—è¡¨
         std::map<Value*, Instruction*> defined_list;
-        // loadÖ¸Áî¼°Æä¶¨ÖµµÄÁĞ±í
+        // loadæŒ‡ä»¤åŠå…¶å®šå€¼çš„åˆ—è¡¨
         std::map<Instruction*, Value*> forward_list;
         std::map<Value*, Value*> new_value;
         std::set<Instruction*> delete_list;
-        // ¶Ô´Ë»ù±¾¿éÖĞÃ¿Ò»ÌõÖ¸Áî
+
+        // å¯¹æ­¤åŸºæœ¬å—ä¸­æ¯ä¸€æ¡æŒ‡ä»¤
         for (auto inst : bb->get_instructions()) {
-            // ¶Ô·Ç¾Ö²¿±äÁ¿²»×ö²Ù×÷£¬ÕâÀïÖ»¶Ô¿éÄÚ×öÓÅ»¯
+            // å¯¹éå±€éƒ¨å˜é‡ä¸åšæ“ä½œ
             if (!isLocalVarOp(inst)) continue;
-            // Èç¹ûÊÇstoreÖ¸Áî
+            // å¦‚æœæ˜¯storeæŒ‡ä»¤ï¼šstore x, ptrï¼Œè¿™é‡Œxå‚æ•°åœ¨å‰ï¼Œä½†æ˜¯ç±»å†…éƒ¨å®šä¹‰æŒ‡å®šäº†lvalueæ˜¯ptrï¼Œrvalueæ˜¯x
+            // æ•ˆæœä¹Ÿå°±æ˜¯[ptr] = x
             if (inst->get_instr_type() == Instruction::OpID::store) {
-                // storeÖ¸Áî°ÑÓÒÖµ´æµ½×óÖµ
                 Value* lvalue = static_cast<StoreInst*>(inst)->get_lval();
                 Value* rvalue = static_cast<StoreInst*>(inst)->get_rval();
                 auto load_inst = dynamic_cast<Instruction*>(rvalue);
-                // Èç¹ûÓÒÖµÊÇÄ³¸öloadÖ¸Áî£¬ÇÒÓĞ¹ØÓÚ´ËloadÖ¸ÁîµÄÓÒÖµĞÅÏ¢
+                // å¦‚æœå³å€¼æ˜¯æŸä¸ªloadæŒ‡ä»¤ï¼Œä¸”æœ‰å…³äºæ­¤loadæŒ‡ä»¤çš„å³å€¼ä¿¡æ¯
                 if (load_inst && forward_list.find(load_inst) != forward_list.end()) {
-                    // Ö±½Ó½«Ö¸ÁîµÄÓÒÖµ£¨loadÖ¸Áî£©ĞŞ¸ÄÎªloadÖ¸ÁîµÄÓÒÖµ£¬ÕâÑù¾Í¿ÉÒÔÉ¾³ıloadÖ¸ÁîÁË
+                    // ç›´æ¥å°†æŒ‡ä»¤çš„å³å€¼ï¼ˆloadæŒ‡ä»¤ï¼‰ä¿®æ”¹ä¸ºloadæŒ‡ä»¤çš„å³å€¼
                     rvalue = forward_list.find(load_inst)->second;
                 }
-                // Èç¹û×óÖµÔÚ¶¨ÖµÁĞ±íÖĞ£¬Ò²¾ÍÊÇËµÓĞÄ³¸öÖ¸Áî¶Ô´Ë×óÖµ¶¨ÖµÁË
-                // ¸üĞÂ×óÖµ¶¨ÖµµÄÖ¸Áî£¨¸üĞÂÎªµ±Ç°Ö¸Áî£©£¬²¢ÇÒ°ÑÖ®Ç°µÄ¶¨ÖµÖ¸Áî²åÈëdelete_list£¬±íÊ¾Æä¶¨ÖµÒÑ¾­±»×¢ÏúÁË
-                // ·ñÔò£¬Ïò¶¨ÖµÁĞ±íÖĞ²åÈëĞÂµÄ
+
+                // å¦‚æœå·¦å€¼åœ¨å®šå€¼åˆ—è¡¨ä¸­ï¼Œä¹Ÿå°±æ˜¯è¯´æœ‰æŸä¸ªæŒ‡ä»¤å¯¹æ­¤å·¦å€¼å®šå€¼äº†
+                // æ›´æ–°å¯¹å·¦å€¼å®šå€¼çš„æŒ‡ä»¤ï¼ˆä¹Ÿå°±æ˜¯æ›´æ–°ä¸ºå½“å‰æŒ‡ä»¤ï¼‰ï¼Œå¹¶ä¸”æŠŠä¹‹å‰çš„å®šå€¼æŒ‡ä»¤æ’å…¥delete_listï¼Œè¡¨ç¤ºå…¶å®šå€¼å·²ç»è¢«æ³¨é”€äº†
+                // å¦åˆ™ï¼Œå‘å®šå€¼åˆ—è¡¨ä¸­æ’å…¥æ–°çš„
+
+                // ä¸ºä»€ä¹ˆå·¦å€¼å¦‚æœæœ‰å®šå€¼ï¼Œå°±å¯ä»¥åˆ é™¤è¿™æ¡storeæŒ‡ä»¤ï¼Ÿ
+                // å› ä¸ºæˆ‘ä»¬ç°åœ¨æ˜¯ä»¥æŸç§é¡ºåºè¿›è¡Œæ“ä½œï¼Œå½“å‰çš„æŒ‡ä»¤ â€œçœ‹åˆ°â€ ä¹‹å‰çš„æ•°æ®ï¼Œå®šå€¼ä¹‹ç±»çš„ï¼Œå·²ç»è¢«ä¸´æ—¶ä¿å­˜äº†
+                // æ‰€ä»¥è¿™é‡Œç›¸å½“äºæŠŠæ˜¾å¼çš„ store è½¬æ¢æˆä¸´æ—¶çš„è®°å½•ï¼Œåé¢ä½¿ç”¨å°±è¡Œäº†
                 if (defined_list.find(lvalue) != defined_list.end()) {
                     auto pair = defined_list.find(lvalue);
-                    delete_list.insert(pair->second);
-                    pair->second = inst;
+                    delete_list.insert(pair->second);// åˆ é™¤æ—§çš„
+                    pair->second = inst;// æ–°å¢æ–°çš„ï¼Œä¸åˆ é™¤ï¼Œåé¢å¯èƒ½è¿˜è¦ç”¨
                 }
                 else {
                     defined_list.insert({ lvalue, inst });
                 }
-                // new_valueÓ¦¸ÃÊÇÒ»¸öÊÕ¼¯×óÖµºÍÓÒÖµµÄÓ³Éä¹ØÏµµÄÁĞ±í
-                // Èç¹ûÕÒµ½ÁË£¬Ôò¸üĞÂÓÒÖµ£¬·ñÔò²åÈëĞÂµÄ×óÖµ-ÓÒÖµ¶Ô
+                // new_valueåº”è¯¥æ˜¯ä¸€ä¸ªæ”¶é›†å·¦å€¼å’Œå³å€¼çš„æ˜ å°„å…³ç³»çš„åˆ—è¡¨
+                // å¦‚æœæ‰¾åˆ°äº†ï¼Œåˆ™æ›´æ–°å³å€¼ï¼Œå¦åˆ™æ’å…¥æ–°çš„å·¦å€¼-å³å€¼å¯¹
                 if (new_value.find(lvalue) != new_value.end()) {
                     new_value.find(lvalue)->second = rvalue;
                 }
@@ -69,64 +75,65 @@ void Mem2Reg::insideBlockForwarding() {
                     new_value.insert({ lvalue, rvalue });
                 }
             }
-            // Èç¹ûÊÇloadÖ¸Áî
+            // å¦‚æœæ˜¯loadæŒ‡ä»¤ï¼Œæˆ‘ä»¬å¸Œæœ›å¯èƒ½é€šè¿‡å¯»æ‰¾define_listä¸­æŸä¸ªå®šå€¼ï¼Œæ¥æ›¿æ¢åé¢
+            //  å‡ºç°çš„æ‰€æœ‰loadçš„å·¦å€¼ï¼Œè¿›è€Œè¾¾åˆ°åˆ é™¤loadæŒ‡ä»¤çš„ç›®çš„
             else if (inst->get_instr_type() == Instruction::OpID::load) {
                 Value* lvalue = static_cast<LoadInst*>(inst)->get_lval();
                 Value* rvalue = dynamic_cast<Value*>(inst);
-                // Èç¹ûÃ»ÓĞ¶Ô´Ë×óÖµµÄ¶¨ÖµÖ¸Áî£¬ÔòÌø¹ı
+                // å¦‚æœæ²¡æœ‰å¯¹æ­¤å·¦å€¼çš„å®šå€¼æŒ‡ä»¤ï¼Œåˆ™è·³è¿‡
                 if (defined_list.find(lvalue) == defined_list.end()) continue;
-                // ÓĞ¶Ô×óÖµµÄ¶¨Öµ£¬ÕÒµ½µ±Ç°Öµ£¬²¢²åÈëforward_listÖĞ
+                // æœ‰å¯¹å·¦å€¼çš„å®šå€¼ï¼Œæ‰¾åˆ°å½“å‰å€¼ï¼Œå¹¶æ’å…¥forward_listä¸­
                 Value* value = new_value.find(lvalue)->second;
                 forward_list.insert({ inst, value });
             }
         }
-        // ¶ÔÃ¿Ò»ÌõÖ¸Áî¶¼½øĞĞÍêÁËÉÏÊö²Ù×÷
-        // ¶ÔÖ¸ÁîÀ´ËµºÃÏñÃ»ÓĞÌØ¶¨µÄË³Ğò£¬ÊÇÓÉ»ù±¾¿éµÄinstr_list¾ö¶¨µÄ
+        // å¯¹æ¯ä¸€æ¡æŒ‡ä»¤éƒ½è¿›è¡Œå®Œäº†ä¸Šè¿°æ“ä½œ
+        // å¯¹æŒ‡ä»¤æ¥è¯´å¥½åƒæ²¡æœ‰ç‰¹å®šçš„é¡ºåºï¼Œæ˜¯ç”±åŸºæœ¬å—çš„instr_listå†³å®šçš„
 
-        // ¶Ôforward_listÖĞµÄËùÓĞ<instruction, value>¶Ô
+        // å¯¹forward_listä¸­çš„æ‰€æœ‰<instruction, value>å¯¹
         for (auto submap : forward_list) {
             Instruction* inst = submap.first;
             Value* value = submap.second;
-            // ¶Ôµ±Ç°Ö¸ÁîµÄËùÓĞÒıÓÃÀ´Ëµ
+            // å¯¹å½“å‰æŒ‡ä»¤çš„æ‰€æœ‰å¼•ç”¨æ¥è¯´
             for (auto use : inst->get_use_list()) {
                 Instruction* use_inst = dynamic_cast<Instruction*>(use.val_);
-                // ĞŞ¸ÄÖ¸ÁîµÄ²Ù×÷Êı£¬arg_no_Ö¸Ê¾ĞòºÅ£¬valueÖ¸Ê¾Öµ£¬Ò²¾ÍÊÇÓÃÖµÈ¥Ìæ»»ÒıÓÃ
+                // ä¿®æ”¹æŒ‡ä»¤çš„æ“ä½œæ•°ï¼Œarg_no_æŒ‡ç¤ºåºå·ï¼ŒvalueæŒ‡ç¤ºå€¼ï¼Œä¹Ÿå°±æ˜¯ç”¨å€¼å»æ›¿æ¢å¼•ç”¨
                 use_inst->set_operand(use.arg_no_, value);
             }
-            // É¾³ıÕâÌõloadÖ¸Áî
+            // åˆ é™¤è¿™æ¡loadæŒ‡ä»¤
             bb->delete_instr(inst);
         }
-        // É¾³ıËùÓĞdelete_listÖĞµÄÖ¸Áî£¨£©
+        // åˆ é™¤æ‰€æœ‰delete_listä¸­çš„æŒ‡ä»¤ï¼ˆï¼‰
         for (auto inst : delete_list) {
             bb->delete_instr(inst);
         }
     }
 }
 
-// ·ÅÖÃ¦Õº¯Êı
+// æ”¾ç½®Ï†å‡½æ•°
 void Mem2Reg::genPhi() {
-    // È«¾ÖÃû×Ö¼¯ºÏ
+    // å…¨å±€åå­—é›†åˆ
     std::set<Value*> globals;
-    // ±äÁ¿ÔÚÄÄĞ©¿éÖĞ±»¶¨Öµ
+    // å˜é‡åœ¨å“ªäº›å—ä¸­è¢«å®šå€¼
     std::map<Value*, std::set<BasicBlock*>> defined_in_block;
-    // ±éÀúËùÓĞ»ù±¾¿é
+    // éå†æ‰€æœ‰åŸºæœ¬å—
     for (auto bb : func_->get_basic_blocks()) {
-        // ±éÀú»ù±¾¿éÖĞËùÓĞÖ¸Áî
+        // éå†åŸºæœ¬å—ä¸­æ‰€æœ‰æŒ‡ä»¤
         for (auto inst : bb->get_instructions()) {
-            // Èç¹ûÖ¸ÁîÉæ¼°·Ç¾Ö²¿±äÁ¿£¬ÔòºöÂÔ
+            // å¦‚æœæŒ‡ä»¤æ¶‰åŠéå±€éƒ¨å˜é‡ï¼Œåˆ™å¿½ç•¥
             if (!isLocalVarOp(inst)) continue;
-            // Èç¹ûÊÇloadÖ¸Áî
+            // å¦‚æœæ˜¯loadæŒ‡ä»¤
             if (inst->get_instr_type() == Instruction::OpID::load) {
-                // °Ñ×óÖµ²åÈëÈ«¾ÖÃû×Ö¼¯ºÏÖĞ
+                // æŠŠå·¦å€¼æ’å…¥å…¨å±€åå­—é›†åˆä¸­
                 Value* lvalue = static_cast<LoadInst*>(inst)->get_lval();
                 globals.insert(lvalue);
             }
-            // Èç¹ûÊÇstoreÖ¸Áî
+            // å¦‚æœæ˜¯storeæŒ‡ä»¤
             else if (inst->get_instr_type() == Instruction::OpID::store) {
                 Value* lvalue = static_cast<StoreInst*>(inst)->get_lval();
-                // °Ñµ±Ç°»ù±¾¿é²åÈë×óÖµµÄ¶¨Öµ¿éÁĞ±í
-                //   µ½ÕâÎÒ²Å·´Ó¦¹ıÀ´storeÓ¦¸ÃÊÇ°ÑÖµ´æ½øÒ»¸ö´æ´¢µ¥Ôª£¬Ò²¾ÍÊÇÖ¸Õë£¬¶ø²»ÊÇ·Å»ØÄÚ´æ2333
-                //   ÄÇload¶ÔÓ¦µÄÒ²¾ÍÊÇ°ÑÖµ´ÓÒ»¸öÄÚ´æµ¥Ôª£¨Ö¸Õë£©¶Á³öÀ´
+                // æŠŠå½“å‰åŸºæœ¬å—æ’å…¥å·¦å€¼çš„å®šå€¼å—åˆ—è¡¨
+                //   åˆ°è¿™æˆ‘æ‰ååº”è¿‡æ¥storeåº”è¯¥æ˜¯æŠŠå€¼å­˜è¿›ä¸€ä¸ªå­˜å‚¨å•å…ƒï¼Œä¹Ÿå°±æ˜¯æŒ‡é’ˆï¼Œè€Œä¸æ˜¯æ”¾å›å†…å­˜2333
+                //   é‚£loadå¯¹åº”çš„ä¹Ÿå°±æ˜¯æŠŠå€¼ä»ä¸€ä¸ªå†…å­˜å•å…ƒï¼ˆæŒ‡é’ˆï¼‰è¯»å‡ºæ¥
                 if (defined_in_block.find(lvalue) != defined_in_block.end()) {
                     defined_in_block.find(lvalue)->second.insert(bb);
                 }
@@ -137,21 +144,21 @@ void Mem2Reg::genPhi() {
         }
     }
 
-    // ´ËÊ±ÒÑ¾­ÍÑÀëÉÏÒ»¸ö¶ÔbbÑ­»·µÄfor
+    // æ­¤æ—¶å·²ç»è„±ç¦»ä¸Šä¸€ä¸ªå¯¹bbå¾ªç¯çš„for
 
     std::map<BasicBlock*, std::set<Value*>> bb_phi_list;
 
-    // ¶ÔËùÓĞÓĞ¶¨ÖµµÄ±äÁ¿
+    // å¯¹æ‰€æœ‰æœ‰å®šå€¼çš„å˜é‡
     for (auto var : globals) {
-        // »ñÈ¡¶Ô±äÁ¿¶¨ÖµµÄ»ù±¾¿é¼¯ºÏ
+        // è·å–å¯¹å˜é‡å®šå€¼çš„åŸºæœ¬å—é›†åˆ
         auto define_bbs = defined_in_block.find(var)->second;
         std::vector<BasicBlock*> queue;
         queue.assign(define_bbs.begin(), define_bbs.end());
         int iter_pointer = 0;
         for (; iter_pointer < queue.size(); iter_pointer++) {
-            // ¶ÔÃ¿¸ö»ù±¾¿éµü´ú
+            // å¯¹æ¯ä¸ªåŸºæœ¬å—è¿­ä»£
             for (auto bb_domfront : queue[iter_pointer]->get_dom_frontier()) {
-                // ¶ÔÃ¿¸ö»ù±¾¿éµÄÖ§Åä±ß½ç£¬ÔÚÆäÖĞ²åÈëµ±Ç°±äÁ¿µÄ¦Õº¯Êı
+                // å¯¹æ¯ä¸ªåŸºæœ¬å—çš„æ”¯é…è¾¹ç•Œï¼Œåœ¨å…¶ä¸­æ’å…¥å½“å‰å˜é‡çš„Ï†å‡½æ•°
                 if (bb_phi_list.find(bb_domfront) != bb_phi_list.end()) {
                     auto phis = bb_phi_list.find(bb_domfront);
                     if (phis->second.find(var) == phis->second.end()) {
@@ -176,22 +183,22 @@ void Mem2Reg::genPhi() {
     }
 }
 
-// ¼ÆËã±äÁ¿¶¨ÖµÏà¹ØµÄĞÅÏ¢
+// è®¡ç®—å˜é‡å®šå€¼ç›¸å…³çš„ä¿¡æ¯
 void Mem2Reg::valueDefineCounting() {
-    // Çå¿Õ
+    // æ¸…ç©º
     define_var = std::map<BasicBlock*, std::vector<Value*>>();
-    // ¶ÔÃ¿¸ö»ù±¾¿é¼ÆËã¶¨Öµ
+    // å¯¹æ¯ä¸ªåŸºæœ¬å—è®¡ç®—å®šå€¼
     for (auto bb : func_->get_basic_blocks()) {
         define_var.insert({ bb, {} });
         for (auto inst : bb->get_instructions()) {
-            // ¦ÕÖ¸Áî£¬ÊÇÒ»ÖÖ¶ÔÄÚ´æµÄ¶¨Öµ
+            // Ï†æŒ‡ä»¤ï¼Œæ˜¯ä¸€ç§å¯¹å†…å­˜çš„å®šå€¼
             if (inst->get_instr_type() == Instruction::OpID::phi) {
                 auto lvalue = dynamic_cast<PhiInst*>(inst)->get_lval();
                 define_var.find(bb)->second.push_back(lvalue);
             }
-            // storeÖ¸Áî£¬Ò²ÊÇÒ»ÖÖ¶ÔÄÚ´æµÄ¶¨Öµ
+            // storeæŒ‡ä»¤ï¼Œä¹Ÿæ˜¯ä¸€ç§å¯¹å†…å­˜çš„å®šå€¼
             else if (inst->get_instr_type() == Instruction::OpID::store) {
-                // ·Ç¾Ö²¿Ãû×Ö²»¿¼ÂÇ
+                // éå±€éƒ¨åå­—ä¸è€ƒè™‘
                 if (!isLocalVarOp(inst)) continue;
                 auto lvalue = dynamic_cast<StoreInst*>(inst)->get_lval();
                 define_var.find(bb)->second.push_back(lvalue);
@@ -203,12 +210,12 @@ void Mem2Reg::valueDefineCounting() {
 std::map<Value *, std::vector<Value *>> value_status;
 std::set<BasicBlock *> visited;
 
-// ¶ÔÓÚ´«ÈëµÄÒ»¸ö»ù±¾¿é×ö²Ù×÷
+// å¯¹äºä¼ å…¥çš„ä¸€ä¸ªåŸºæœ¬å—åšæ“ä½œ
 void Mem2Reg::valueForwarding(BasicBlock* bb) {
     std::set<Instruction*> delete_list;
-    // ½«±¾»ù±¾¿é±ê¼ÇÎªÒÑ·ÃÎÊ£¨¸Ğ¾õ¿ÉÒÔÓÃvector<bool>ÓÅ»¯£©
+    // å°†æœ¬åŸºæœ¬å—æ ‡è®°ä¸ºå·²è®¿é—®ï¼ˆæ„Ÿè§‰å¯ä»¥ç”¨vector<bool>ä¼˜åŒ–ï¼‰
     visited.insert(bb);
-    // ´¦Àí¦ÕÖ¸Áî
+    // å¤„ç†Ï†æŒ‡ä»¤
     for (auto inst : bb->get_instructions()) {
         if (inst->get_instr_type() != Instruction::OpID::phi) break;
         auto lvalue = dynamic_cast<PhiInst*>(inst)->get_lval();
@@ -221,11 +228,11 @@ void Mem2Reg::valueForwarding(BasicBlock* bb) {
         }
     }
 
-    // »ù±¾¿éÖĞ²»Éæ¼°¦Õ¡¢·Ç¾Ö²¿Ãû×ÖµÄÖ¸Áî
+    // åŸºæœ¬å—ä¸­ä¸æ¶‰åŠÏ†ã€éå±€éƒ¨åå­—çš„æŒ‡ä»¤
     for (auto inst : bb->get_instructions()) {
         if (inst->get_instr_type() == Instruction::OpID::phi) continue;
         if (!isLocalVarOp(inst)) continue;
-        // ´«²¥£¬ÓÃ¼ÇÂ¼µÄÖµÌæ»»²»±ØÒªµÄloadºÍstore
+        // ä¼ æ’­ï¼Œç”¨è®°å½•çš„å€¼æ›¿æ¢ä¸å¿…è¦çš„loadå’Œstore
         if (inst->get_instr_type() == Instruction::OpID::load) {
             Value* lvalue = static_cast<LoadInst*>(inst)->get_lval();
             Value* new_value = *(value_status.find(lvalue)->second.end() - 1);
@@ -244,15 +251,15 @@ void Mem2Reg::valueForwarding(BasicBlock* bb) {
         delete_list.insert(inst);
     }
 
-    // ¸øbbµÄºó¼Ì»ù±¾¿éÈ·¶¨¦ÕÖµ
-    // bbµÄºó¼Ì»ù±¾¿é
+    // ç»™bbçš„åç»§åŸºæœ¬å—ç¡®å®šÏ†å€¼
+    // bbçš„åç»§åŸºæœ¬å—
     for (auto succbb : bb->get_succ_basic_blocks()) {
         for (auto inst : succbb->get_instructions()) {
-            // Èç¹ûÓĞ¦ÕÖ¸Áî
+            // å¦‚æœæœ‰Ï†æŒ‡ä»¤
             if (inst->get_instr_type() == Instruction::OpID::phi) {
                 auto phi = dynamic_cast<PhiInst*>(inst);
                 auto lvalue = phi->get_lval();
-                // È¡µ½¦ÕµÄ×óÖµ£¬È»ºó°Ñ¶¨Öµ±íÖĞ×îºóÒ»¸ö¶¨Öµ¸øËû£¬×¢Òâ²ÎÊıbbÊÇpre_bb
+                // å–åˆ°Ï†çš„å·¦å€¼ï¼Œç„¶åæŠŠå®šå€¼è¡¨ä¸­æœ€åä¸€ä¸ªå®šå€¼ç»™ä»–ï¼Œæ³¨æ„å‚æ•°bbæ˜¯pre_bb
                 if (value_status.find(lvalue) != value_status.end()) {
                     if (value_status.find(lvalue)->second.size() > 0) {
                         Value* new_value = *(value_status.find(lvalue)->second.end() - 1);
@@ -271,13 +278,13 @@ void Mem2Reg::valueForwarding(BasicBlock* bb) {
         }
     }
 
-    // Èç¹ûÃ»·ÃÎÊ£¬¾Íµİ¹é·ÃÎÊºóĞøbb
+    // å¦‚æœæ²¡è®¿é—®ï¼Œå°±é€’å½’è®¿é—®åç»­bb
     for (auto succbb : bb->get_succ_basic_blocks()) {
         if (visited.find(succbb) != visited.end()) continue;
         valueForwarding(succbb);
     }
 
-    // É¾³ı¶¨Öµ
+    // åˆ é™¤å®šå€¼
     auto var_set = define_var.find(bb)->second;
     for (auto var : var_set) {
         if (value_status.find(var) == value_status.end()) continue;
@@ -290,7 +297,7 @@ void Mem2Reg::valueForwarding(BasicBlock* bb) {
     }
 }
 
-// É¾³ıAllocaÓï¾ä
+// åˆ é™¤Allocaè¯­å¥
 void Mem2Reg::removeAlloc() {
     for (auto bb : func_->get_basic_blocks()) {
         std::set<Instruction*> delete_list;

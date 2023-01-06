@@ -319,7 +319,7 @@ private:
 
 public:
     static LoadInst *create_load(Type *ty, Value *ptr, BasicBlock *bb);
-    Value *get_lval() { return this->get_operand(0); }
+    Value* get_lval() { return this->get_operand(0); }
 
     Type *get_load_type() const;
 
