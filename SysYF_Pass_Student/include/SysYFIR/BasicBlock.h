@@ -68,6 +68,8 @@ public:
     /****************api about dominate tree****************/
     void set_idom(BasicBlock* bb) { idom_ = bb; }
     BasicBlock* get_idom() { return idom_; }
+    void set_irdom(BasicBlock* bb) { irdom_ = bb; }
+    BasicBlock* get_irdom() { return irdom_; }
     void add_dom_frontier(BasicBlock* bb) { dom_frontier_.insert(bb); }
     void add_rdom_frontier(BasicBlock* bb) { rdom_frontier_.insert(bb); }
     void clear_rdom_frontier() { rdom_frontier_.clear(); }
@@ -91,6 +93,7 @@ private:
     std::set<BasicBlock*> rdom_frontier_;
     std::set<BasicBlock*> rdoms_;
     BasicBlock* idom_;
+    BasicBlock* irdom_;
     std::set<Value*> live_in;
     std::set<Value*> live_out;
     Function* parent_;

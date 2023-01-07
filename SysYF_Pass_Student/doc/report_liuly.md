@@ -98,8 +98,11 @@ for (auto bb: f->get_basic_blocks()) {
 ```cpp
 // 内部 load 转发
 insideBlockForwarding();
+// 根据 DF 生成空 phi 指令
 genPhi();
+// 记录基本块可用左值
 valueDefineCounting();
+// 递归 forward
 valueForwarding(func_->get_entry_block());
 // 删除所有的变量 alloca 指令（不包含数组）
 removeAlloc();
@@ -135,6 +138,26 @@ removeAlloc();
 
 ##### genPhi 函数
 
+这一部分与 pdf 算法类似。
+
+1. 在 globals 中记录所有的被 load 的地址。因为局部的 load 已经被消除，这里的 load 都是跨越基本块的。
+
+2. 在 defined_in_block 中记录地址在哪些基本块有 store 行为。
+
+bb_phi_list 是每个基本块需要生成 phi 指令的地址的集合。
+
+##### valueDefineCounting 函数
+
+对于每个基本块，记录所有「可用的」地址，包括 phi 指令和 store 指令。
+
+##### valueForwarding 函数
+
+这一部分也与 pdf 的算法类似。相当于 Rename 函数，重命名，并填充 phi 函数。
+
+##### removeAlloc 函数
+
+删除无用的 alloca 指令。
+
 #### B2-2
 
 #### B2-3
@@ -146,3 +169,156 @@ removeAlloc();
 ### 检查器
 
 #### B4-1
+
+## 选做-死代码消除
+
+### 参考
+
+https://www.clear.rice.edu/comp512/Lectures/10Dead-Clean-SCCP.pdf
+http://nwjs.net/news/282538.html
+
+（这个课程和 DCE.pdf 用的就是同一本书？考虑一下引用出处怎么写）
+
+### 概念
+
+解决以下问题：
+
+- 无用的操作 DEAD（死代码消除）
+- 无用的控制流 CLEAN（跳转至跳转）
+- 无法到达的基本块（这个还没实现）
+
+DAED：活跃变量分析或者 Mark-Sweep 的两趟流程（PDF 上有）
+CLEAN：在消除死代码之后，CFG 可能会有空（以分支或跳转结尾）的基本块，需要清理
+（Devised by Rob Shillingsburg ( 1992), documented by John Lu (1994)）
+
+### DEAD
+
+基于逆向支配关系分析，具体见 pdf 算法。
+
+首先 mark critical 变量（改变环境（全局变量，指针参数），或者有 I/O 行为，或者是返回，jmp 语句）
+
+- 这里区分 branch 语句和 jmp 语句（下文统称为 br 指令）
+
+如果 x <- call f, ... 中，f 不是纯函数，那么 x 是 critical 的
+
+如果 x <- y op z 中，x 是 critical 的，那么 y 和 z 也得是 critical 的
+
+如果 x 是 critical 的，那么 x 的 rdf 反向支配前线的基本块的最后的 branch 语句也是 critical 的
+
+critical 变量实际就是函数执行流上必须要计算的变量，其他的变量都是可以删除的
+
+在 mark 完成后，执行 sweep 过程，删除其他未 mark 变量，并且 mark 变量所在 bb 的 rdf 的有条件跳转（原因见后面 clean 部分）
+
+#### 纯函数
+
+与上述 critical 变量的内涵类似，纯函数就是不改变环境，也没有 I/O 行为的函数
+
+判断纯函数的好处是：
+
+```cpp
+int foo1() {
+    int i = 100;
+    while (i > 0) {
+        putint(i);
+        i = i - 1;
+    }
+    return 0;
+}
+
+int foo2() {
+    int i = 100;
+    while (i > 0) {
+        i = i - 1;
+    }
+    return 0;
+}
+
+int main() {
+    foo1();
+    foo2();
+    return 0;
+}
+```
+
+foo2 是一个纯函数，对它的计算可以优化掉。
+
+纯函数的判断过程类似一个 bfs，因为非纯函数会「传染」到所有它的调用者
+
+第一遍先单独对每个函数初步判断是否是纯函数（是否有改变环境行为，这里先不考虑函数调用）
+
+```cpp
+bool DeadCode::markPureInside(Function *f) {
+    // 只有函数声明，无法判断，认为非纯（主要是处理 runtime 的 I/O 函数）
+    if (f->is_declaration()) {
+        return false;
+    }
+    for (auto *bb : f->get_basic_blocks()) {
+        for (auto *inst : bb->get_instructions()) {
+            // store 指令，且无法找到 alloca 作为左值，说明非局部变量
+            if (inst->is_store() && store_to_alloca(inst) == nullptr) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+```
+
+这里用到了一个辅助函数：
+
+```cpp
+static inline AllocaInst *store_to_alloca(Instruction *inst) {
+    // lval 无法转换为 alloca 指令说明是非局部的，有副作用
+    Value *lval_runner = inst->get_operand(1);
+    while (auto *gep_inst = dynamic_cast<GetElementPtrInst *>(lval_runner)) {
+        lval_runner = gep_inst->get_operand(0);
+    }
+    return dynamic_cast<AllocaInst *>(lval_runner);
+}
+```
+
+之后从非纯函数出发，进行 bfs
+
+```cpp
+// 考虑非纯函数调用的「传染」
+for (auto i = 0; i < work_list.size(); i++) {
+    auto *callee_function = work_list[i];
+    for (auto &use : callee_function->get_use_list()) {
+        auto *call_inst = dynamic_cast<CallInst *>(use.val_);
+        auto *caller_function = call_inst->get_function();
+        if (is_pure[caller_function]) {
+            is_pure[caller_function] = false;
+            work_list.push_back(caller_function);
+        }
+    }
+}
+```
+
+#### 数组别名
+
+这是实现上的一个细节问题。
+
+对于 x <- y op z，如果 x critical，很容易说明 y 和 z 也 critical。
+
+但如果对局部数组有使用，这里涉及到一个别名问题，需要将局部数组的所有可能定值都设为 critical
+
+采取的策略是：第一遍对 store 指令建立起 lval 到 `set<StoreInst*>` 的映射，在遍历时，如果发现 alloca（也就是数组左值）critical，那么就把对数组的所有定值设为 critical。
+
+### CLEAN
+
+- br 目标相同，则替换成 jmp
+- 空块 jmp 到其他块，则将这两个块合并
+- B1 顺序执行 jmp 到 B2（B2 无其他前驱），则将两个块合并
+- jmp 到一个空 Br 块，则 jmp 替换成 br（可能会导致 B2 成为不可达的基本块）
+
+实现细节：
+
+- 后序遍历，以便先清理某个结点的后继节点
+- 导致：
+  - 回边未处理，需要多次迭代
+  - 迭代可能会改变 cfg，所以下次迭代要重新计算迭代顺序
+- 注意维护 bb 间前驱后继关系
+
+空块的 branch 自环无法消除？
+
+- 其实可以由 dead 消除（假设程序出口唯一，说明这其实是无用的自环）
