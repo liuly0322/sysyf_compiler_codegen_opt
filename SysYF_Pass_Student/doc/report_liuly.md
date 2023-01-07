@@ -304,6 +304,8 @@ for (auto i = 0; i < work_list.size(); i++) {
 
 采取的策略是：第一遍对 store 指令建立起 lval 到 `set<StoreInst*>` 的映射，在遍历时，如果发现 alloca（也就是数组左值）critical，那么就把对数组的所有定值设为 critical。
 
+array_concat.sy
+
 ### CLEAN
 
 - br 目标相同，则替换成 jmp

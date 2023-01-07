@@ -6,5 +6,7 @@ add_library(
         Mem2Reg.cpp
         ActiveVar.cpp
         Check.cpp
+        PureFunction.cpp
+        ConstantAndRewrite.cpp
         DeadCode.cpp
 )

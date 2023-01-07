@@ -1,25 +1,13 @@
 #include "DeadCode.h"
 #include "Instruction.h"
+#include "PureFunction.h"
 #include "Value.h"
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-/**
- * @brief 试图还原 store 到 左值 (alloca 指令)
- *
- * 用于判断是否具有副作用
- * @param inst store 指令
- */
-static inline AllocaInst *store_to_alloca(Instruction *inst) {
-    // lval 无法转换为 alloca 指令说明是非局部的，有副作用
-    Value *lval_runner = inst->get_operand(1);
-    while (auto *gep_inst = dynamic_cast<GetElementPtrInst *>(lval_runner)) {
-        lval_runner = gep_inst->get_operand(0);
-    }
-    return dynamic_cast<AllocaInst *>(lval_runner);
-}
+using PureFunction::is_pure;
 
 static inline void delete_basic_block(BasicBlock *i, BasicBlock *j) {
     i->replace_all_use_with(j);
@@ -34,7 +22,7 @@ static inline void delete_basic_block(BasicBlock *i, BasicBlock *j) {
 
 bool DeadCode::is_critical_inst(Instruction *inst) {
     if (inst->is_ret() ||
-        (inst->is_store() && store_to_alloca(inst) == nullptr)) {
+        (inst->is_store() && PureFunction::store_to_alloca(inst) == nullptr)) {
         return true;
     }
     if (inst->is_br()) {
@@ -53,7 +41,7 @@ bool DeadCode::is_critical_inst(Instruction *inst) {
 
 void DeadCode::execute() {
     // 标记纯函数
-    markPure();
+    PureFunction::markPure(module);
     // 逐个函数处理
     for (auto *f : module->get_functions()) {
         // 标记重要变量
@@ -78,7 +66,7 @@ std::unordered_set<Instruction *> DeadCode::mark(Function *f) {
                 marked.insert(inst);
                 work_list.push_back(inst);
             } else if (inst->is_store()) {
-                auto *lval = store_to_alloca(inst);
+                auto *lval = PureFunction::store_to_alloca(inst);
                 if (lval_store.count(lval) != 0) {
                     lval_store[lval].insert(static_cast<StoreInst *>(inst));
                 } else {
@@ -259,55 +247,4 @@ void DeadCode::clean(Function *f) {
             }
         }
     } while (changed);
-}
-
-/**
- * @brief 判断函数是否是纯函数，维护 is_pure 表
- *
- * 非纯函数：有对全局变量或传入数组的 store，或者调用了非纯函数
- * 这里不考虑 MMIO 等 load 导致的非纯函数情形
- */
-void DeadCode::markPure() {
-    auto functions = module->get_functions();
-    std::vector<Function *> work_list;
-    // 先考虑函数本身有无副作用，并将 worklists 初始化为非纯函数
-    for (auto *f : functions) {
-        is_pure[f] = markPureInside(f);
-        if (!is_pure[f]) {
-            work_list.push_back(f);
-        }
-    }
-    // 考虑非纯函数调用的「传染」
-    for (auto i = 0; i < work_list.size(); i++) {
-        auto *callee_function = work_list[i];
-        for (auto &use : callee_function->get_use_list()) {
-            auto *call_inst = dynamic_cast<CallInst *>(use.val_);
-            auto *caller_function = call_inst->get_function();
-            if (is_pure[caller_function]) {
-                is_pure[caller_function] = false;
-                work_list.push_back(caller_function);
-            }
-        }
-    }
-}
-
-/**
- * @brief 不考虑函数内部调用其他函数，判断纯函数
- *
- * 用于第一遍生成 worklist
- */
-bool DeadCode::markPureInside(Function *f) {
-    // 只有函数声明，无法判断
-    if (f->is_declaration()) {
-        return false;
-    }
-    for (auto *bb : f->get_basic_blocks()) {
-        for (auto *inst : bb->get_instructions()) {
-            // store 指令，且无法找到 alloca 作为左值，说明非局部变量
-            if (inst->is_store() && store_to_alloca(inst) == nullptr) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
