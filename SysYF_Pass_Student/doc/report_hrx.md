@@ -58,8 +58,6 @@ for (auto bb : f->get_basic_blocks()) {
 
 > 在分析代码实现之前，不妨先来回顾一下 SSA 的动机。
 >
-> ![image-20230105214735479](report_hrx.assets/image-20230105214735479.png)
->
 > 这一遍优化，对于优化前的 IR 考虑三种语句：
 >
 > - $x=\text{alloca }T$（表示开辟一个 $T$ 类型的内存单元，指针放入 $x$）
@@ -282,7 +280,35 @@ for (auto bb : f->get_basic_blocks()) {
 
 而在计算 OUT[B] 时，其后继可能含有若干 $\phi$ 函数（例如 $\phi(x_1,...,x_n)$），若某个变量 $x_j(1\le j\le n)$ 出现在了 B 中，则在 B 的出口必须将其置为活跃。
 
+注意，这里 $\phi$ 是 $\phi([x_1,B_1],...)$ 这样的形式，要分别对不同的前驱设置不同的额外活跃性。
+
+- $\text{IN}(B)=use_B\cup(\text{OUT}[B]-def_B)$
+- $\text{OUT}[B]=\cup_{S\in succ(B)}(\text{IN}[S]\cup\Phi[S,B])$
+
+不错，现在开始看看原来的整体算法
+
+```Python
+IN[Exit] = φ
+for (every block B):
+    IN[B] = φ
+changed = True
+while changed:
+    changed = False
+    for (every block B except Exit):
+        caculate OUT[B]
+        caculate IN[B] # includes caculate use_B & def_B
+```
+
 #### B3-1
+
+活跃变量分析的 execute 环节是按如下流程设计的：
+
+- 以当前 module 的所有 function 为基本单位进行分析；
+- 寻找当前 function 的 $\text{EXIT}$ 基本块（联系 B1-6）；
+- 对所有基本块计算 $\text{IN}$ 和 $\text{OUT}$ 集合；
+  - **在计算 $\text{IN}[B]$ 集合时**，已经拿到了当前 $\text{OUT}[B]$，$\text{OUT}[B]$ 中有一些变量（记为 $def$）是先定值后引用的，那么在 $def$ 的定值之前，$def$ 是死的，所以计算 $\text{IN}[B]$ 时需要删除；有一些变量（记为 $use$）是先引用后定值的，$use$ 不在 $\text{OUT}[B]$ 中（因为后定值杀死了 $Y$），所以计算 $\text{IN}[B]$ 时并上 $use$。这一做法和教材上的分析是一致的，反映到数据流方程上就是 $\text{IN}(B)=use_B\cup(\text{OUT}[B]-def_B)$。
+  - **在计算 $\text{OUT}[B]$ 集合时**，除教材上的分析外，还需考虑到其后继可能含有若干 $\phi$ 函数。例如，在 $B$ 的某后继 $S$ 中有 $\phi$ 函数 $\phi=[op_1,A],[op_2,B]$（不考虑别名），若 $op_2$ 出现在 $\text{OUT}[B]$ 中，则在 $B$ 的出口必须将其置为活跃。反映到数据流方程上，若记后继 $S$ 中关于 $B$ 的 $\phi$ 变量引用为 $\Phi[S,B]$，则 $\text{OUT}[B]=\cup_{S\in succ(B)}(\text{IN}[S]\cup\Phi[S,B])$。
+- 对所有的基本块的一次计算为一次迭代，计算 $\text{IN}$ 集合时自动维护变量 `changed` 以示迭代计算是否结束。迭代计算结束后，调用 `BasicBlock` 的两个接口 `set_live_in` 和 `set_live_out`，将计算结果保存。
 
 ### 检查器
 
