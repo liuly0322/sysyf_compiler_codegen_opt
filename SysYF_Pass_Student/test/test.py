@@ -83,10 +83,12 @@ if __name__ == "__main__":
     TEST_DIRS = [
                 './Test_H/Easy_H/',
                 './Test_H/Medium_H/',
-                './Test_H//Hard_H/',
+                './Test_H/Hard_H/',
                 './Test/Easy/',
                 './Test/Medium/',
-                './Test/Hard/'
+                './Test/Hard/',
+                './function_test2020/',
+                './function_test2021/'
                 ]
     # you can only modify this to add your testcase
 
