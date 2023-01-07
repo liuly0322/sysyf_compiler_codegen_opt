@@ -82,8 +82,8 @@ for (auto bb: f->get_basic_blocks()) {
 
 > **Remark**：
 >
-> - store 指令可看作 `store rvalue lvalue`（*lvalue = rvalue）
-> - load 指令可看做 `rvalue = load lvalue` （rvalue = *lvalue）
+> - `store` 指令可看作 `store rvalue lvalue`（*lvalue = rvalue）
+> - `load` 指令可看做 `rvalue = load lvalue` （rvalue = *lvalue）
 >
 > 所以左值(lvalue) 实际上是 `alloca` 的地址，以下左值即指这些地址，而右值指地址中实际的值。
 
@@ -92,7 +92,7 @@ for (auto bb: f->get_basic_blocks()) {
 这是 `Mem2Reg` 执行的总流程，遍历每个函数，进行如下操作
 
 - `insideBlockForwarding`，进行基本块内优化，删去了块内可被优化的 store/load 指令；
-- `genPhi`，生成 $\phi$ 指令；
+- `genPhi`，生成 `Phi` 指令；
 - `module->set_print_name`，为每条指令设置名字，在 Mem2Reg 优化遍应该并不重要，可忽略；
 - `valueDefineCounting`，记录每个基本块中定值的左值列表；
 - `valueForwarding(func_->get_entry_block())`，进行重命名（即 `Rename(s)`）；
@@ -106,34 +106,34 @@ for (auto bb: f->get_basic_blocks()) {
 
 用到的数据结构，生存周期均为一个基本块：
 
-- `defined_list`：`map<Value, Instruction>`，存储**左值**到**对该左值定值的(store)指令**的映射；
-- `forward_list`：`map<Instruction, Value>`，存储 **load 指令**到**右值**的映射。 并且此 load 指令的左值在本基本块已被定值，而映射的正是对此左值定值的右值。所以实际上这条 load 指令可以被删去，其 `rvalue` 可以被映射的右值替换；
+- `defined_list`：`map<Value, Instruction>`，存储**左值**到**对该左值定值的(`store`)指令**的映射；
+- `forward_list`：`map<Instruction, Value>`，存储 **`load` 指令**到**右值**的映射。 并且此 `load` 指令的左值在本基本块已被定值，而映射的正是对此左值定值的右值。所以实际上这条 `load` 指令可以被删去，其 `rvalue` 可以被映射的右值替换；
 - `new_value`：`map<Value, Value>`，存储**左值**到**(最新的)对该左值定值的右值**的映射；
-- `delete_list`：`set<Instruction>`，存储定值被注销的(store)指令
+- `delete_list`：`set<Instruction>`，存储定值被注销的(`store`)指令
 
 此函数的流程为，首先遍历每个基本块中的每条可被优化的指令(`isLocalVarOp` 判断为真的指令)。
 
-对于 store 指令：
+对于 `store` 指令：
 
-- 若 `rvalue` 为 load 指令右值且该条 load 指令在 `forward_list` 中，则替换右值；
-- 若 `lvalue` 已在 `defined_list` 中，则将那条 store 指令加入`delete_list` 中（表明那条指令的定值在本块内即已被注销），`defined_list` 中的值更新为本条指令；否则 `defined_list` 加入这条 store 指令；
+- 若 `rvalue` 为 `load` 指令右值且该条 `load` 指令在 `forward_list` 中，则替换右值；
+- 若 `lvalue` 已在 `defined_list` 中，则将那条 `store` 指令加入`delete_list` 中（表明那条指令的定值在本块内即已被注销），`defined_list` 中的值更新为本条指令；否则 `defined_list` 加入这条 `store` 指令；
 - 若 `lvalue` 在 `new_value` 中，则更新其值，否则新增；
 
-对于 load 指令：
+对于 `load` 指令：
 
 - 若 `lvalue` 不在 `defined_list` 中，则无事发生（说明在本基本块中没有对此左值的定值，也即其跨基本块）；否则在 `new_value` 中找到对该左值定值的右值，加入 `forward_list` 中；
 
-接下来，遍历 `forward_list`，对用到 `rvalue` 的地方进行替换，然后删除该 load 指令；最后删除 `delete_list` 中的 store 指令
+接下来，遍历 `forward_list`，对用到 `rvalue` 的地方进行替换，然后删除该 `load` 指令；最后删除 `delete_list` 中的 `store` 指令
 
-**总结**：本函数删去了不必要的 load（对本块内定值的 load）和 store（在本块内定值被注销），对用到那些右值的地方进行了替换维护。
+**总结**：本函数删去了不必要的 `load`（对本块内定值的 `load`）和 `store`（在本块内定值被注销），对用到那些右值的地方进行了替换维护。
 
 ##### genPhi
 
 用到的数据结构：
 
-- `globals`：`set<Value>`，存储 load 指令的 `lvalue`，由于经过 `insideBlockForwarding`，此时的 load 都是跨基本块的；
+- `globals`：`set<Value>`，存储 `load` 指令的 `lvalue`，由于经过 `insideBlockForwarding`，此时的 `load` 都是跨基本块的；
 - `defined_in_block`：`map<Value, set<BasicBlock>>`，存储 `lvalue` 到其被定义的 `BasicBlock` 的映射；
-- `bb_phi_list`：`map<BasicBlock, set<Value>>`，存储 `BasicBlock` 到该基本块中需要 $\phi$ 指令的 `lvalue` 集合的映射；
+- `bb_phi_list`：`map<BasicBlock, set<Value>>`，存储 `BasicBlock` 到该基本块中需要 `Phi` 指令的 `lvalue` 集合的映射；
 
 以上三者生存周期为单个函数，以下生存周期对应与 `globals` 中的单个 `lvalue`
 
@@ -142,11 +142,11 @@ for (auto bb: f->get_basic_blocks()) {
 
 此函数的流程为，首先遍历每个基本块中的每条可被优化的指令(`isLocalVarOp` 判断为真的指令)。
 
-- 对于 load 指令：将 `lvalue` 加入 `globals`，因为经过 `insideBlockForwarding`，此时保留的是跨基本块的，所以加入 `globals`；
+- 对于 `load` 指令：将 `lvalue` 加入 `globals`，因为经过 `insideBlockForwarding`，此时保留的是跨基本块的，所以加入 `globals`；
 
-- 对于 store 指令：将 `lvalue` 对应的基本块加入 `defined_in_block`；
+- 对于 `store` 指令：将 `lvalue` 对应的基本块加入 `defined_in_block`；
 
-然后，遍历 `globals` 中的每个变量（对应 pdf 中 `for each name x in Globals` ），然后遍历 `queue` 中的每个基本块（对应 pdf 中 `for each block b in WorkList`）；遍历该基本块的支配边界 （对应 pdf 中`for each block d in DF(b)`），若该基本块对应的需要 $\phi$ 指令的 `lvalue` 集合中没有该 `lvalue` ，则创建 $\phi$ 指令，并加入，然后将此基本块入队；否则新建 Phi 范数，对应于 pdf 中
+然后，遍历 `globals` 中的每个变量（对应 pdf 中 `for each name x in Globals` ），然后遍历 `queue` 中的每个基本块（对应 pdf 中 `for each block b in WorkList`）；遍历该基本块的支配边界 （对应 pdf 中`for each block d in DF(b)`），若该基本块对应的需要 `Phi` 指令的 `lvalue` 集合中没有该 `lvalue` ，则创建 `Phi` 指令，并加入，然后将此基本块入队；否则新建 Phi 范数，对应于 pdf 中
 
 ```c
 if d has no Phi-function for x then 
@@ -154,7 +154,7 @@ if d has no Phi-function for x then
     worklist <- workList U {d}  
 ```
 
-**总结**：本函数主要插入 $\phi$ 指令，条件是，若基本块 `b` 中有对 `x` 的定义，且其跨基本块作用，则在DF(b)(支配边界) 中的每个结点起始处都放置一个对应的 $\phi$ 函数。
+**总结**：本函数主要插入 `Phi` 指令，条件是，若基本块 `b` 中有对 `x` 的定义，且其跨基本块作用，则在DF(b)(支配边界) 中的每个结点起始处都放置一个对应的 $\phi$ 函数。
 
 ##### valueDefineCounting
 
@@ -162,8 +162,8 @@ if d has no Phi-function for x then
 
 流程为，遍历每个基本块的每个指令
 
-- 若为 $\phi$ 指令，将左值加入；
-- 若为 store 指令，且满足 `isLocalVarOp`，将左值加入；
+- 若为 `Phi` 指令，将左值加入；
+- 若为 `store` 指令，且满足 `isLocalVarOp`，将左值加入；
 
 ##### valueForwarding
 
@@ -171,23 +171,23 @@ if d has no Phi-function for x then
 
 用到的数据结构：
 
-- `value_status`：`map<Value, vector<Value>>`，存储 `lvalue` 到其对应的 $\phi$ **指令**或对应的 store 指令的**右值**的列表的映射，实际上相当于 pdf 中的 Stack，记录最新的右值信息；
+- `value_status`：`map<Value, vector<Value>>`，存储 `lvalue` 到其对应的 `Phi` **指令**或对应的 `store` 指令的**右值**的列表的映射，实际上相当于 pdf 中的 Stack，记录最新的右值信息；
 - `visited`：`set<BasicBlock>`，标记已访问过的 Block；
 
 以上两个生存周期为全局，以下为单个基本块
 
 - `delete_list`：`set<Instruction>`，存储待删除的 load/store 指令
 
-此函数的流程为，首先标记本基本块已访问，遍历基本块的每条指令，将 $\phi$ 指令加入 `value_status`；
+此函数的流程为，首先标记本基本块已访问，遍历基本块的每条指令，将 `Phi` 指令加入 `value_status`；
 
 然后继续遍历 `isLocalVarOp` 的指令
 
-- 若为 load 指令：`new_value` 为该左值对应的最新的右值（由 `value_status` 得），然后替换所有使用该 load 右值处为 `new_value`；
-- 若为 store 指令：`value_status` 插入该 store 指令的右值；
+- 若为 `load` 指令：`new_value` 为该左值对应的最新的右值（由 `value_status` 得），然后替换所有使用该 `load` 右值处为 `new_value`；
+- 若为 `store` 指令：`value_status` 插入该 `store` 指令的右值；
 
-- 无论是 load 还是 store 最后都加入 `delete_list` 中；
+- 无论是 `load` 还是 `store` 最后都加入 `delete_list` 中；
 
-接着遍历**后继基本块**，遍历每条 $\phi$ 指令，`new_value` 为该 $\phi$ 指令左值对应的最新的值，然后将 `new_value` 和**本基本块**加入该条 $\phi$ 指令的操作数中，即设置 $\phi$ 指令的参数；对应 pdf 中
+接着遍历**后继基本块**，遍历每条 `Phi` 指令，`new_value` 为该 `Phi` 指令左值对应的最新的值，然后将 `new_value` 和**本基本块**加入该条 `Phi` 指令的操作数中，即设置 `Phi` 指令的参数；对应 pdf 中
 
 ```c
 for each successor of b in the CFG 
@@ -217,6 +217,7 @@ for each successor s of b in the dominator tree
 
 - 首先进行基本块内优化，删去了块内可被优化的 store/load 指令；
 - 其次，在合适的地方插入 $\phi$ 函数，若基本块 `b` 中有对 `x` 的定义，且其跨基本块作用，则在DF(b)(支配边界) 中的每个结点起始处都放置一个对应的 $\phi$ 函数。
+- `valueDefineCounting`，记录每个基本块中定值的左值列表；
 - 接着记录每个基本块中定值的左值列表（下面重命名用）；
 - 然后进行重命名，并删除不必要的 store/load 指令，即非全局非数组指针的 store/load 都被删去；
 - 最后删除不必要的 `alloca` 指令；
@@ -353,7 +354,7 @@ label29
 op3 op2 
 ```
 
-然后 `valueForwarding(func_->get_entry_block())`，进行重命名，并删除不必要的 store/load 指令，即非全局非数组指针的 store/load 都被删去，这里列举出重命名后的 $\phi$ 指令如
+然后 `valueForwarding(func_->get_entry_block())`，进行重命名，并删除不必要的 store/load 指令，即非全局非数组指针的 store/load 都被删去，这里列举出重命名后的 `Phi` 指令如
 
 ```asm
 label7:                                                ; preds = %label_entry, %label29
@@ -465,24 +466,24 @@ A：可能删除的是满足 `isLocalVarOp` 条件的指令，即左值为非全
   %op5 = load i32, i32* @b
 ```
 
-Q：在基本块内前进`insideBlockForwarding`时，对store指令处理时为什么`rvalue`在`forward_list`中存在时，就需要将`rvalue`替换成`forward_list`映射中的`->second`值？
+Q：在基本块内前进`insideBlockForwarding`时，对`store`指令处理时为什么`rvalue`在`forward_list`中存在时，就需要将`rvalue`替换成`forward_list`映射中的`->second`值？
 
-A：因为 `forward_list` 存储 **load 指令**到**右值**的映射，此 load 指令的左值在本基本块已被定值，而映射的是对此左值定值的右值。所以 `rvalue` 在 `forward_list` 中存在表明原来的 load 指令可以删去，`rvalue` 应该被映射的右值替换。
+A：因为 `forward_list` 存储 **`load` 指令**到**右值**的映射，此 `load` 指令的左值在本基本块已被定值，而映射的是对此左值定值的右值。所以 `rvalue` 在 `forward_list` 中存在表明原来的 `load` 指令可以删去，`rvalue` 应该被映射的右值替换。
 
 Q：在基本块内前进时，`defined_list`代表什么含义？
 
-A：`defined_list` 存储**左值**到**对该左值定值的(store)指令**的映射；
+A：`defined_list` 存储**左值**到**对该左值定值的(`store`)指令**的映射；
 
 Q：生成phi指令`genPhi`的第一步两层for循环在收集什么信息，这些信息在后面的循环中如何被利用生成Phi指令？
 
-A：收集 `globals`(存储 load 指令的 `lvalue`，由于经过 `insideBlockForwarding`，此时的 load 都是跨基本块的) 和 `defined_in_block`(存储 `lvalue` 到其被定义的 `BasicBlock` 的映射)信息。
+A：收集 `globals`(存储 `load` 指令的 `lvalue`，由于经过 `insideBlockForwarding`，此时的 `load` 都是跨基本块的) 和 `defined_in_block`(存储 `lvalue` 到其被定义的 `BasicBlock` 的映射)信息。
 
-- `globals` 用来维护需要生成 $\phi$ 指令的变量列表，对应于 pdf 中 `for each name x in Globals` 中的 `Globals`
+- `globals` 用来维护需要生成 `Phi` 指令的变量列表，对应于 pdf 中 `for each name x in Globals` 中的 `Globals`
 - `defined_in_block` 相当于维护 pdf 中的 Blocks，`defined_in_block.find(var)->second;` 包含所有定义 `var` 的基本块，这被用来初始化 `queue`（对应 pdf 中的 Worklist）；
 
 Q：`valueDefineCounting`为`defined_var`记录了什么信息
 
-A：记录 `BasicBlock` 到该基本块中定值的左值列表的映射，该列表包括 $\phi$ 和 store 指令定值的左值。
+A：记录 `BasicBlock` 到该基本块中定值的左值列表的映射，该列表包括 `Phi` 和 `store` 指令定值的左值。
 
 Q：`valueForwarding`在遍历基本块时采用的什么方式
 
@@ -490,11 +491,11 @@ A：首先是进入入口基本块，然后每次进入一个基本块就标记�
 
 Q：`valueForwarding`中为什么`value_status`需要对phi指令做信息收集
 
-A：`value_status` 实际上相当于 pdf 中的 Stack，记录最新的值信息，而 $\phi$ 指令也会对左值进行定值(或者说赋予了新名字)，因此 Phi 指令也需要记录；
+A：`value_status` 实际上相当于 pdf 中的 Stack，记录最新的值信息，而 `Phi` 指令也会对左值进行定值(或者说赋予了新名字)，因此 Phi 指令也需要记录；
 
-Q：`valueForwarding`中第二个循环对load指令的替换是什么含义
+Q：`valueForwarding`中第二个循环对`load`指令的替换是什么含义
 
-A：因为这条 load 指令实际上不必要，`value_status` 中已经有该左值最新的右值信息，因此可以用该右值去**替换**所有用到此 load 右值的地方，这样就可以删去此 load 指令。
+A：因为这条 `load` 指令实际上不必要，`value_status` 中已经有该左值最新的右值信息，因此可以用该右值去**替换**所有用到此 `load` 右值的地方，这样就可以删去此 `load` 指令。
 
 Q：`valueForwarding`中出现的`defined_var`和`value_status`插入条目之间有什么联系
 
@@ -509,7 +510,7 @@ A：`defined_var` 存储的是该基本块定义的左值，而 `value_status` �
 以上要求能体现 `Mem2Reg` 的两处效果(这些都可以通过先前的例子体现)
 
 - 一是 `valueForwarding` 中能删去不必要的 store/load 指令，因为对一个变量的多处定值或引用会有许多冗余的 store/load；
-- 二是能体现出增加了 $\phi$ 指令，有两层嵌套，且在不同分支有定值或引用，在不同分支汇合的基本块中就会需要产生 $\phi$ 指令。
+- 二是能体现出增加了 `Phi` 指令，有两层嵌套，且在不同分支有定值或引用，在不同分支汇合的基本块中就会需要产生 `Phi` 指令。
 
 ### 活跃变量分析
 
@@ -518,3 +519,70 @@ A：`defined_var` 存储的是该基本块定义的左值，而 `value_status` �
 ### 检查器
 
 #### B4-1
+
+以下根据 `Check.h` 中定义的关键函数来介绍检查的内容
+
+```cpp
+void valueDefineCounting(Function *fun);
+void checkFunction(Function *fun);
+void checkBasicBlock(BasicBlock *bb);
+void checkPhiInstruction(Instruction *inst);
+void checkCallInstruction(Instruction *inst);
+void checkInstruction(Instruction *inst);
+void checkUse(User *user);
+```
+
+##### execute
+
+- 首先检查**全局变量**的使用是否符合约定(具体在 `checkUse`)；
+
+- 然后就是检查当前**模块**的每个函数是否符合约定。
+
+##### valueDefineCounting
+
+辅助函数，用于收集当前函数定义的所有定值。可以理解为收集 `%op == ... ` 的 `%op`。
+
+##### checkFunction
+
+- 首先检查函数是否存在于当前模块，即检查上下文；
+- 其次检查函数**返回值的类型**是否合法；
+- 接着检查函数的**入口基本块**是否没有**前驱**；
+- 然后对每个基本块做检查。
+
+##### checkBasicBlock
+
+- 首先，同样检查上下文，当前基本块是否位于函数内；
+- 其次，检查是否以终结语句结尾；
+- 接着，收集**开头**的 $\phi$ 指令，检查每一条 $\phi$ 指令是否符合约定；
+- 然后，检查后面的指令，特别地，如果此时发现 $\phi$ 指令也是不合约定的，因为 $\phi$ 指令应该出现在每个基本块开头；
+- 最后，检查基本块的前驱后继关系，即当前基本块是否为其后继基本块的前驱。
+
+##### checkPhiInstruction
+
+- 首先，将 $\phi$ 指令普通指令检查；
+- 其次，检查 $\phi$ 指令来的路径是否为所有前驱(查资料时发现 LLVM IR 有此条约定，但是实际上，有些路径并没用，最后打印时会发现有 `undef`，因此本条实际没必要，暂时注释)
+- 接着，检查其操作数中的基本块是否唯一，即不可能从同一基本块有多个值到达；
+- 然后，检查每一个操作数中每一个值的类型是否相同。
+
+##### checkInstruction
+
+- 首先，检查上下文，是否位于基本块中；
+- 其次，检查使用定值的地方是否符合约定，见 `checkUse`；
+- 接着，检查每一操作数是否已有定值，例如，形如 `%op0 = %op1 ...` 右侧出现的 `%op1` 应该有定值。这一条可以防止删除某个值的的时候忘记对使用的地方进行修正；
+- 若操作数为函数/基本块，同样需要检查是否已有定义，防止删除的时候忘修改；
+- 若为 `call` 指令，还需要进一步检查；
+- 若为 `ret` 指令，需检查返回类型是否匹配。
+
+##### checkCallInstruction
+
+- 首先，检查函数的返回类型和调用的返回类型是否一致；
+- 其次，检查形参和实参个数是否匹配；
+- 接着，检查每一个参数的类型是否匹配。
+
+##### checkUse
+
+- 检查每一个使用该全局变量/定值的地方是否为合法的指令，主要为检查 `use_list` 是否有异常修改。
+
+最后在每一遍优化之后加入检查遍，来保证每一遍优化之后的 `IR` 依然符合约定。
+
+这里默认初始生成的 `IR` 没有问题(一开始通过对初始 `IR` 的检查来反馈我们的检查遍是否合理)。
