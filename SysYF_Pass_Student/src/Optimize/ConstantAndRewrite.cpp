@@ -4,6 +4,7 @@
 using PureFunction::is_pure;
 
 void ConstantAndRewrite::execute() {
+    PureFunction::markPure(module);
     // 先序遍历支配树，load, store, phi 跳过
     // 如果操作数都是常量，考虑提前计算出结果
     // 否则保存复写关系

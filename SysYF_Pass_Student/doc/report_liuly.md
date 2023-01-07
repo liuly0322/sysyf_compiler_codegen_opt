@@ -172,6 +172,8 @@ bb_phi_list 是每个基本块需要生成 phi 指令的地址的集合。
 
 ## 选做-死代码消除
 
+（这个 pass 单独生效的场景不多，但极端情况有很好的优化性能）
+
 ### 参考
 
 https://www.clear.rice.edu/comp512/Lectures/10Dead-Clean-SCCP.pdf
