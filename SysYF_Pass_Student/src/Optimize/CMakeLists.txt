@@ -7,6 +7,6 @@ add_library(
         ActiveVar.cpp
         Check.cpp
         PureFunction.cpp
-        ConstantAndRewrite.cpp
+        CSE.cpp
         DeadCode.cpp
 )
