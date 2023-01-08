@@ -170,6 +170,16 @@ bb_phi_list 是每个基本块需要生成 phi 指令的地址的集合。
 
 #### B4-1
 
+## 选做-CSE
+
+包含常量传递（直接折叠，SCCP）和 CSE（GVN or use-def?）
+
+SCCP(sparse condition constant Propagation):
+
+- https://gogim1.github.io/posts/eac
+- http://lampwww.epfl.ch/resources/lamp/teaching/advancedCompiler/2005/slides/05-UsingSSA_CP-1on1.pdf
+- https://zhuanlan.zhihu.com/p/434113528
+
 ## 选做-死代码消除
 
 （这个 pass 单独生效的场景不多，但极端情况有很好的优化性能）
