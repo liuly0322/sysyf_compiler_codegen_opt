@@ -301,7 +301,7 @@ while changed:
 
 #### B3-1
 
-活跃变量分析的 execute 环节是按如下流程设计的：
+##### execute 流程设计
 
 - 以当前 module 的所有 function 为基本单位进行分析；
 - 寻找当前 function 的 $\text{EXIT}$ 基本块（联系 B1-6）；
@@ -309,6 +309,40 @@ while changed:
   - **在计算 $\text{IN}[B]$ 集合时**，已经拿到了当前 $\text{OUT}[B]$，$\text{OUT}[B]$ 中有一些变量（记为 $def$）是先定值后引用的，那么在 $def$ 的定值之前，$def$ 是死的，所以计算 $\text{IN}[B]$ 时需要删除；有一些变量（记为 $use$）是先引用后定值的，$use$ 不在 $\text{OUT}[B]$ 中（因为后定值杀死了 $Y$），所以计算 $\text{IN}[B]$ 时并上 $use$。这一做法和教材上的分析是一致的，反映到数据流方程上就是 $\text{IN}(B)=use_B\cup(\text{OUT}[B]-def_B)$。
   - **在计算 $\text{OUT}[B]$ 集合时**，除教材上的分析外，还需考虑到其后继可能含有若干 $\phi$ 函数。例如，在 $B$ 的某后继 $S$ 中有 $\phi$ 函数 $\phi=[op_1,A],[op_2,B]$（不考虑别名），若 $op_2$ 出现在 $\text{OUT}[B]$ 中，则在 $B$ 的出口必须将其置为活跃。反映到数据流方程上，若记后继 $S$ 中关于 $B$ 的 $\phi$ 变量引用为 $\Phi[S,B]$，则 $\text{OUT}[B]=\cup_{S\in succ(B)}(\text{IN}[S]\cup\Phi[S,B])$。
 - 对所有的基本块的一次计算为一次迭代，计算 $\text{IN}$ 集合时自动维护变量 `changed` 以示迭代计算是否结束。迭代计算结束后，调用 `BasicBlock` 的两个接口 `set_live_in` 和 `set_live_out`，将计算结果保存。
+
+##### 代码细节
+
+`ActiveVar` 类中的 `execute` 函数会被调用来执行活跃变量分析算法。该函数用到的数据结构如下：
+
+- `std::map<BasicBlock*, std::set<Value*>>` 保存 $\text{IN}/\text{OUT}$ 集合
+- `std::set<Value*>` 保存计算 $\text{IN}$ 集合过程中计算的 $use/def$ 集合
+
+根据算法，首先需要寻找 $\text{EXIT}$ 基本块，这里使用 B1-6 中的方法：
+
+```C
+for (auto bb : f->get_basic_blocks()) {
+	auto terminate_instr = bb->get_terminator();
+	if (terminate_instr->is_ret()){
+		exit_block = bb;
+		break;
+	}
+}
+```
+
+也就是选取以 ret 指令结尾的块作为 $\text{EXIT}$ 节点。之后，进入迭代计算循环，对所有的基本块的一次计算为一次迭代。
+
+对每个基本块计算时，先计算 $\text{OUT}$ 集合。
+
+- 利用 CFG 的接口 `bb->get_succ_basic_block()` 可以直接获取一个基本块 $B$ 的 CFG 后继；
+- 在操作每个后继 $S$ 时，先将 $\text{IN}[S]$ 插入 $\text{OUT}[B]$ 中，再遍历 $S$ 的指令（$\phi$ 指令都在块的开头），将 $\phi$ 指令中关联 $B$ 的变量插入 $\text{OUT}[B]$ 中。使用 $\phi$ 指令的 `get_operands()` 接口获取操作数，这些操作数是以 $var_1,block_1,var_2,block_2,...$ 的顺序排布的，需要将操作数看成一个个 $var-block$ 对进行处理。
+
+然后是计算 $\text{IN}$ 集合。
+
+- 计算 $\text{IN}$ 集合时自动维护变量 `changed` 以示迭代计算是否结束；
+- 维护 $use,def$：按顺序遍历每条指令，通过查看操作数是否在 $def$ 中可以知道在本次引用前是否有定值；
+- 按数据流方程计算 $\text{IN}(B)=use_B\cup(\text{OUT}[B]-def_B)$ 时，因为本次迭代与之前无关，所以需要将上一次迭代的 $\text{IN}[B]$ 清除，再构造新的 $\text{IN}[B]$。
+
+迭代计算结束后，遍历所有的基本块，调用 `BasicBlock` 的两个接口 `set_live_in` 和 `set_live_out`，将计算结果保存。
 
 ### 检查器
 
