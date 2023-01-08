@@ -58,18 +58,19 @@ void Mem2Reg::insideBlockForwarding() {
                 // 为什么左值如果有定值，就可以删除这条store指令？
                 // 因为我们现在是以某种顺序进行操作，当前的指令 “看到” 之前的数据，定值之类的，已经被临时保存了
                 // 所以这里相当于把显式的 store 转换成临时的记录，后面使用就行了
-                if (defined_list.find(lvalue) != defined_list.end()) {
-                    auto pair = defined_list.find(lvalue);
-                    delete_list.insert(pair->second);// 删除旧的
-                    pair->second = inst;// 新增新的，不删除，后面可能还要用
+                auto defined_pair = defined_list.find(lvalue);
+                if (defined_pair != defined_list.end()) {
+                    delete_list.insert(defined_pair->second);// 删除旧的
+                    defined_pair->second = inst;// 新增新的，不删除，后面可能还要用
                 }
                 else {
                     defined_list.insert({ lvalue, inst });
                 }
                 // new_value应该是一个收集左值和右值的映射关系的列表
                 // 如果找到了，则更新右值，否则插入新的左值-右值对
-                if (new_value.find(lvalue) != new_value.end()) {
-                    new_value.find(lvalue)->second = rvalue;
+                auto new_value_pair = new_value.find(lvalue);
+                if (new_value_pair != new_value.end()) {
+                    new_value_pair->second = rvalue;
                 }
                 else {
                     new_value.insert({ lvalue, rvalue });
@@ -134,8 +135,9 @@ void Mem2Reg::genPhi() {
                 // 把当前基本块插入左值的定值块列表
                 //   到这我才反应过来store应该是把值存进一个存储单元，也就是指针，而不是放回内存2333
                 //   那load对应的也就是把值从一个内存单元（指针）读出来
-                if (defined_in_block.find(lvalue) != defined_in_block.end()) {
-                    defined_in_block.find(lvalue)->second.insert(bb);
+                auto defined_block = defined_in_block.find(lvalue);
+                if (defined_block != defined_in_block.end()) {
+                    defined_block->second.insert(bb);
                 }
                 else {
                     defined_in_block.insert({ lvalue, {bb} });
@@ -159,8 +161,8 @@ void Mem2Reg::genPhi() {
             // 对每个基本块迭代
             for (auto bb_domfront : queue[iter_pointer]->get_dom_frontier()) {
                 // 对每个基本块的支配边界，在其中插入当前变量的φ函数
-                if (bb_phi_list.find(bb_domfront) != bb_phi_list.end()) {
-                    auto phis = bb_phi_list.find(bb_domfront);
+                auto phis = bb_phi_list.find(bb_domfront);
+                if (phis != bb_phi_list.end()) {
                     if (phis->second.find(var) == phis->second.end()) {
                         phis->second.insert(var);
                         auto newphi = PhiInst::create_phi(var->get_type()->get_pointer_element_type(),
@@ -235,7 +237,7 @@ void Mem2Reg::valueForwarding(BasicBlock* bb) {
         // 传播，用记录的值替换不必要的load和store
         if (inst->get_instr_type() == Instruction::OpID::load) {
             Value* lvalue = static_cast<LoadInst*>(inst)->get_lval();
-            Value* new_value = *(value_status.find(lvalue)->second.end() - 1);
+            Value* new_value = *(value_status.find(lvalue)->second.rbegin());
             inst->replace_all_use_with(new_value);
         }
         else if (inst->get_instr_type() == Instruction::OpID::store) {
@@ -262,7 +264,7 @@ void Mem2Reg::valueForwarding(BasicBlock* bb) {
                 // 取到φ的左值，然后把定值表中最后一个定值给他，注意参数bb是pre_bb
                 if (value_status.find(lvalue) != value_status.end()) {
                     if (value_status.find(lvalue)->second.size() > 0) {
-                        Value* new_value = *(value_status.find(lvalue)->second.end() - 1);
+                        Value* new_value = *(value_status.find(lvalue)->second.rbegin());
                         phi->add_phi_pair_operand(new_value, bb);
                     }
                     else {

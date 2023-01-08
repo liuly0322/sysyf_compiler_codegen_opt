@@ -33,8 +33,10 @@ void ActiveVar::execute() {
 
             auto blocks = func_->get_basic_blocks();
             for (auto* bb : blocks) {
-                if (bb == exit_block) continue;
                 // 计算OUT[bb]
+                if (bb == exit_block) {
+                    OUT_list[bb] = {};
+                }
                 auto succ_blocks = bb->get_succ_basic_blocks();
                 for (auto* succ_bb : succ_blocks) {
                     // 先加入IN[succ_bb]
