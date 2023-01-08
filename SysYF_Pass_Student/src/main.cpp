@@ -1,10 +1,13 @@
 #include "ActiveVar.h"
+#include "SCCP.h"
 #include "Check.h"
+#include "DeadCode.h"
 #include "DominateTree.h"
 #include "ErrorReporter.h"
 #include "IRBuilder.h"
 #include "Mem2Reg.h"
 #include "Pass.h"
+#include "RDominateTree.h"
 #include "SyntaxTreeChecker.h"
 #include "SyntaxTreePrinter.h"
 #include "SysYFDriver.h"
@@ -76,14 +79,21 @@ int main(int argc, char *argv[]) {
         if (optimize) {
             PassMgr passmgr(m.get());
             passmgr.addPass<DominateTree>();
+            passmgr.addPass<RDominateTree>();
             passmgr.addPass<Mem2Reg>();
             passmgr.addPass<Check>();
             if (optimize_all) {
                 passmgr.addPass<ActiveVar>();
+                passmgr.addPass<Check>();
                 //  ...
+                passmgr.addPass<SCCP>();
+                passmgr.addPass<Check>();
+                passmgr.addPass<DeadCode>();
+                passmgr.addPass<Check>();
             } else {
                 if (av) {
                     passmgr.addPass<ActiveVar>();
+                    passmgr.addPass<Check>();
                 }
                 //  ...
             }
