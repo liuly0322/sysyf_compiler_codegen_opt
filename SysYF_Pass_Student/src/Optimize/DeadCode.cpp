@@ -10,7 +10,22 @@
 using PureFunction::is_pure;
 
 static inline void delete_basic_block(BasicBlock *i, BasicBlock *j) {
-    i->replace_all_use_with(j);
+    const std::vector<Use> uses{i->get_use_list().begin(), i->get_use_list().end()};
+    for (const auto &use : uses) {
+        // 可能是 phi 指令或者跳转指令
+        // 跳转指令直接替换成 j 即可
+        auto *inst = static_cast<Instruction *>(use.val_);
+        if (inst->is_br()) {
+            inst->set_operand(use.arg_no_, j);
+            continue;
+        }
+        // phi 指令需要统计 i 的所有前驱
+        auto *op = inst->get_operand(use.arg_no_ - 1);
+        inst->remove_operands(use.arg_no_ - 1, use.arg_no_);
+        for (auto *pre : i->get_pre_basic_blocks()) {
+            dynamic_cast<PhiInst *>(inst)->add_phi_pair_operand(op, pre);
+        }
+    }
     // 调整前驱后继关系
     for (auto *pre : i->get_pre_basic_blocks()) {
         pre->add_succ_basic_block(j);

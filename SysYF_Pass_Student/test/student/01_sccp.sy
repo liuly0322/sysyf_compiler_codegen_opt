@@ -1,0 +1,12 @@
+int main() {
+    int count = 10;
+    int i = 12;
+    while (count > 0) {
+        int x = i * 17;
+        int j = i;
+        i = j;
+        count = count - 1;
+        putint(i);
+    }
+    return 0;
+}

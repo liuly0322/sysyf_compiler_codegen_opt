@@ -194,10 +194,6 @@ void SCCP::sccp(Function *f, Module *module) {
     // 初始化
     for (auto *arg : f->get_args()) {
         value_map.insert({arg, ValueStatus{ValueStatus::BOT}});
-        for (auto use : arg->get_use_list()) {
-            auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-            ssa_work_list.emplace_back(arg, use_inst);
-        }
     }
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *expr : bb->get_instructions()) {
