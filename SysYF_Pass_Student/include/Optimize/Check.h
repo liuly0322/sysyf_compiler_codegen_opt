@@ -27,7 +27,7 @@ class Check : public Pass {
 
     // Debug Info Function
     template <typename T1, typename... Ts>
-    void checkFailed(const std::string &message, T1 &v1, Ts &...vs);
+    void checkFailed(const std::string &message, T1 v1, Ts... vs);
 
     // Check Function
     void valueDefineCounting(Function *fun);
