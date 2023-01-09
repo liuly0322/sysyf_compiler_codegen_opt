@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 import subprocess
 import os
+import sys
+import time
 
 IRBuild_ptn = '"{}" "-emit-ir" "-o" "{}" "{}" "-O2"'
 ExeGen_ptn = '"clang" "{}" "-o" "{}" "{}" "../lib/lib.c"'
 Exe_ptn = '"{}"'
 
 def eval(EXE_PATH, TEST_BASE_PATH, optimization):
+    global IRBuild_ptn
     print('===========TEST START===========')
     print('now in {}'.format(TEST_BASE_PATH))
     dir_succ = True
+    # 一共有多少个测试样例
+    testcase_num = len(testcases)
+    statistic_line_count = []
+    statistic_line_count_opt = []
+    statistic_run_time = []
+    statistic_run_time_opt = []
+    # 对每个测试样例
     for case in testcases:
         print('Case %s:' % case, end='')
         TEST_PATH = TEST_BASE_PATH + case
@@ -17,31 +27,68 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
         LL_PATH = TEST_BASE_PATH + case + '.ll'
         INPUT_PATH = TEST_BASE_PATH + case + '.in'
         OUTPUT_PATH = TEST_BASE_PATH + case + '.out'
+        # 是否需要输入
         need_input = testcases[case]
-
+        # 给IR生成命令添加优化选项，并构造新的中间文件名、输出文件名
+        IRBuild_withopt = IRBuild_ptn
+        LL_PATH_OPT = TEST_BASE_PATH + case
+        TEST_PATH_OPT = TEST_PATH
+        for opt in optimization:
+            assert opt == "-av" or opt == "-dce" or opt == "-sccp"
+            IRBuild_withopt += f' "{opt}"'
+            LL_PATH_OPT += f'_{opt[1:]}'
+            TEST_PATH_OPT += f'_{opt[1:]}'
+        LL_PATH_OPT += '.ll'
+        # 给compiler将sy编译成ll
         IRBuild_result = subprocess.run(IRBuild_ptn.format(EXE_PATH, LL_PATH, SY_PATH), shell=True, stderr=subprocess.PIPE)
-        if IRBuild_result.returncode == 0:
+        IRBuild_result_opt = subprocess.run(IRBuild_withopt.format(EXE_PATH, LL_PATH_OPT, SY_PATH), shell=True, stderr=subprocess.PIPE)
+        # 成功sy转ll
+        if IRBuild_result.returncode == 0 and IRBuild_result_opt.returncode == 0:
+            # 计算代码行数优化
+            with open(LL_PATH, "r") as no_opt_f:
+                statistic_line_count.append(no_opt_f.read().count('\n'))
+            with open(LL_PATH_OPT, "r") as opt_f:
+                statistic_line_count_opt.append(opt_f.read().count('\n'))
+
             input_option = None
+            # 如果需要输入
             if need_input:
                 with open(INPUT_PATH, "rb") as fin:
                     input_option = fin.read()
-
             try:
-                res = subprocess.run(ExeGen_ptn.format(optimization, TEST_PATH, LL_PATH), shell=True, stderr=subprocess.PIPE)
-                if res.returncode != 0:
+                # 让clang编译ll文件生成exe文件
+                res = subprocess.run(ExeGen_ptn.format("-O0", TEST_PATH, LL_PATH), shell=True, stderr=subprocess.PIPE)
+                res_opt = subprocess.run(ExeGen_ptn.format("-O0", TEST_PATH_OPT, LL_PATH_OPT), shell=True, stderr=subprocess.PIPE)
+                # clang编译失败
+                if res.returncode != 0 or res_opt.returncode != 0:
                     dir_succ = False
                     print(res.stderr.decode(), end='')
-                    print('\t\033[31mClangExecute Fail\033[0m')
+                    print('\tClangExecute Fail')
                     continue
+                # clang编译成功，执行生成的可执行文件，顺便记录时间
+
+                time_before_no_opt = time.time()
                 result = subprocess.run(Exe_ptn.format(TEST_PATH), shell=True, input=input_option, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                out = result.stdout.split(b'\n')
-                if result.returncode != b'':
+                time_after_no_opt = time.time()
+                statistic_run_time.append(time_after_no_opt - time_before_no_opt)
+
+                time_before_opt = time.time()
+                result_opt = subprocess.run(Exe_ptn.format(TEST_PATH_OPT), shell=True, input=input_option, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                time_after_opt = time.time()
+                statistic_run_time_opt.append(time_after_opt - time_before_opt)
+
+                # 执行的输出
+                out = result_opt.stdout.split(b'\n')
+                if result_opt.returncode != b'':
                     out.append(str(result.returncode).encode())
                 for i in range(len(out)-1, -1, -1):
+                    # 移除\r
                     out[i] = out[i].strip(b'\r')
                     if out[i] == b'':
                         out.remove(b'')
+                # 成功执行，写入输出
                 case_succ = True
+                # 打开输出文件
                 with open(OUTPUT_PATH, "rb") as fout:
                     i = 0
                     for line in fout.readlines():
@@ -51,27 +98,83 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
                         if out[i] != line:
                             dir_succ = False
                             case_succ = False
+                            break
                         i = i + 1
                     if case_succ:
-                        print('\t\033[32mPass\033[0m')
+                        print('\tPass')
                     else:
-                        print('\t\033[31mWrong Answer\033[0m')
+                        print('\tWrong Answer')
             except Exception as _:
                 dir_succ = False
                 print(_, end='')
-                print('\t\033[31mCodeGen or CodeExecute Fail\033[0m')
+                print('\tCodeGen or CodeExecute Fail')
+            # 这里删除了所有中间文件
             finally:
                 subprocess.call(["rm", "-rf", TEST_PATH, TEST_PATH])
+                subprocess.call(["rm", "-rf", TEST_PATH, TEST_PATH_OPT])
                 subprocess.call(["rm", "-rf", TEST_PATH, TEST_PATH + ".o"])
-                subprocess.call(["rm", "-rf", TEST_PATH, TEST_PATH + ".ll"])
-
+                subprocess.call(["rm", "-rf", TEST_PATH, LL_PATH])
+                subprocess.call(["rm", "-rf", TEST_PATH, LL_PATH_OPT])
         else:
             dir_succ = False
-            print('\t\033[31mIRBuild Fail\033[0m')
+            print('\tIRBuild Fail')
+
     if dir_succ:
-        print('\t\033[32mSuccess\033[0m in dir {}'.format(TEST_BASE_PATH))
+        # 统计优化结果
+        print('-----------OPT RESULT-----------')
+        print(f'\t{testcase_num} cases in this dir')
+        effective_num = len(statistic_line_count)
+        print(f'\t{effective_num} cases passed')
+        prompt1 = '\toptimization options: '
+        for opt_option in optimization:
+            prompt1 += opt_option
+        print(prompt1)
+
+        line_better = 0
+        line_10_better = 0
+        line_20_better = 0
+        line_best = 1
+
+        time_better = 0
+        time_10_better = 0
+        time_20_better = 0
+        time_best = 1
+
+        for i in range(effective_num):
+            if statistic_line_count_opt[i] < statistic_line_count[i]:
+                line_better += 1
+            opt_rate = statistic_line_count_opt[i]/statistic_line_count[i]
+            if opt_rate < 0.9:
+                line_10_better += 1
+            if opt_rate < 0.8:
+                line_20_better += 1
+            if opt_rate < line_best:
+                line_best = opt_rate
+            
+            if statistic_run_time_opt[i] < statistic_run_time[i]:
+                time_better += 1
+            opt_rate = statistic_run_time_opt[i]/statistic_run_time[i]
+            if opt_rate < 0.9:
+                time_10_better += 1
+            if opt_rate < 0.8:
+                time_20_better += 1
+            if opt_rate < time_best:
+                time_best = opt_rate
+
+        print('\tLine')
+        print(f'\t\t{line_better} cases better than no-opt')
+        print(f'\t\t{line_10_better} cases 10% better than no-opt')
+        print(f'\t\t{line_20_better} cases 20% better than no-opt')
+        print(f'\t\tbest opt-rate is {int(line_best*100)}%\n')
+        print('\tTime')
+        print(f'\t\t{time_better} cases better than no-opt')
+        print(f'\t\t{time_10_better} cases 10% better than no-opt')
+        print(f'\t\t{time_20_better} cases 20% better than no-opt')
+        print(f'\t\tbest opt-rate is {int(time_best*100)}%\n')
+
+        print('\tSuccess in dir {}'.format(TEST_BASE_PATH))
     else:
-        print('\t\033[31mFail\033[0m in dir {}'.format(TEST_BASE_PATH))
+        print('\tFail in dir {}'.format(TEST_BASE_PATH))
 
     print('============TEST END============')
     return dir_succ
@@ -92,34 +195,56 @@ if __name__ == "__main__":
                 ]
     # you can only modify this to add your testcase
 
-    optimization = "-O0"     # -O0 -O1 -O2 -O3 -O4 -Ofast
+    # 获取优化选项
+    opt_options = sys.argv[1:]
+    optimization = {}
+    for opt in opt_options:
+        if opt == "-av":
+            optimization["-av"] = True
+            continue
+        if opt == "-dce":
+            optimization["-dce"] = True
+            continue
+        if opt == "-sccp":
+            optimization["-sccp"] = True
+            continue
+
+    # 失败的样例集
     fail_dirs = set()
     for TEST_BASE_PATH in TEST_DIRS:
         testcases = {}  # { name: need_input }
+        # compiler地址
         EXE_PATH = os.path.abspath('../build/compiler')
         if not os.path.isfile(EXE_PATH):
             print("compiler does not exist")
             exit(1)
+        # 检查样例集文件夹是否存在
         for Dir in TEST_DIRS:
             if not os.path.isdir(Dir):
                 print("folder {} does not exist".format(Dir))
                 exit(1)
+        # map返回一个元组
         testcase_list = list(map(lambda x: x.split('.'), os.listdir(TEST_BASE_PATH)))
         testcase_list.sort()
+        # 移除奇怪的testcase
         for i in range(len(testcase_list)-1, -1, -1):
             if len(testcase_list[i]) == 1:
                 testcase_list.remove(testcase_list[i])
+        # 初始化所有都不需要输入
         for i in range(len(testcase_list)):
             testcases[testcase_list[i][0]] = False
+        # 如果有in文件则需要输入
         for i in range(len(testcase_list)):
             testcases[testcase_list[i][0]] = testcases[testcase_list[i][0]] | (testcase_list[i][1] == 'in')
+        # 执行
         if not eval(EXE_PATH, TEST_BASE_PATH, optimization=optimization):
             fail_dirs.add(TEST_BASE_PATH)
+    
     if len(fail_dirs) > 0:
         fail_dir_str = ''
         for Dir in fail_dirs:
             fail_dir_str += (Dir + "\t")
-        print("\t\033[31mTest Fail\033[0m in dirs {}".format(fail_dir_str))
+        print("\tTest Fail in dirs {}".format(fail_dir_str))
     else:
-        print("\t\033[32mAll Tests Passed\033[0m")
+        print("\tAll Tests Passed")
         
