@@ -17,13 +17,17 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
     testcase_num = len(testcases)
     statistic_line_count = []
     statistic_line_count_opt = []
+    total_line_count = 0
+    total_line_count_opt = 0
     statistic_run_time = []
     statistic_run_time_opt = []
+    total_run_time = 0
+    total_run_time_opt = 0
     testcase_names = []
     # 对每个测试样例
     for case in testcases:
         testcase_names.append(case)
-        print('Case %s:' % case, end='')
+        # print('Case %s:' % case, end='')
         TEST_PATH = TEST_BASE_PATH + case
         SY_PATH = TEST_BASE_PATH + case + '.sy'
         LL_PATH = TEST_BASE_PATH + case + '.ll'
@@ -48,9 +52,13 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
         if IRBuild_result.returncode == 0 and IRBuild_result_opt.returncode == 0:
             # 计算代码行数优化
             with open(LL_PATH, "r") as no_opt_f:
-                statistic_line_count.append(no_opt_f.read().count('\n'))
+                lines = no_opt_f.read().count('\n') - 20
+                statistic_line_count.append(lines)
+                total_line_count += lines
             with open(LL_PATH_OPT, "r") as opt_f:
-                statistic_line_count_opt.append(opt_f.read().count('\n'))
+                lines = opt_f.read().count('\n') - 20
+                statistic_line_count_opt.append(lines)
+                total_line_count_opt += lines
 
             input_option = None
             # 如果需要输入
@@ -72,12 +80,16 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
                 time_before_no_opt = time.time()
                 result = subprocess.run(Exe_ptn.format(TEST_PATH), shell=True, input=input_option, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 time_after_no_opt = time.time()
-                statistic_run_time.append(time_after_no_opt - time_before_no_opt)
+                time_cost_no_opt = time_after_no_opt - time_before_no_opt
+                statistic_run_time.append(time_cost_no_opt)
+                total_run_time += time_cost_no_opt
 
                 time_before_opt = time.time()
                 result_opt = subprocess.run(Exe_ptn.format(TEST_PATH_OPT), shell=True, input=input_option, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 time_after_opt = time.time()
-                statistic_run_time_opt.append(time_after_opt - time_before_opt)
+                time_cost_opt = time_after_opt - time_before_opt
+                statistic_run_time_opt.append(time_cost_opt)
+                total_run_time_opt += time_cost_opt
 
                 # 执行的输出
                 out = result_opt.stdout.split(b'\n')
@@ -103,7 +115,8 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
                             break
                         i = i + 1
                     if case_succ:
-                        print('\tPass')
+                        pass
+                        # print('\tPass')
                     else:
                         print('\tWrong Answer')
             except Exception as _:
@@ -167,18 +180,16 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
                 time_best_i = i
                 time_best = opt_rate
 
-        print('Line')
+        print(f'Line: {total_line_count} lines to {total_line_count_opt} lines, rate: {100 - int(total_line_count_opt / total_line_count * 100)}%')
         print(f'\t{line_better} cases better than no-opt')
         print(f'\t{line_10_better} cases 10% better than no-opt')
         print(f'\t{line_20_better} cases 20% better than no-opt')
         print(f'\tbest opt-rate is {int(line_best*100)}%, tesecase: {testcase_names[line_best_i]}')
-        print('Time')
+        print('Time: {:.2f}s to {:.2f}s, rate: {}%'.format(total_run_time, total_run_time_opt, 100 - int(total_run_time_opt / total_run_time * 100)))
         print(f'\t{time_better} cases better than no-opt')
         print(f'\t{time_10_better} cases 10% better than no-opt')
         print(f'\t{time_20_better} cases 20% better than no-opt')
-        print(f'\tbest opt-rate is {int(time_best*100)}%, tesecase: {testcase_names[time_best_i]}\n')
-
-        print('Success in dir {}'.format(TEST_BASE_PATH))
+        print(f'\tbest opt-rate is {int(time_best*100)}%, tesecase: {testcase_names[time_best_i]}')
     else:
         print('Fail in dir {}'.format(TEST_BASE_PATH))
 

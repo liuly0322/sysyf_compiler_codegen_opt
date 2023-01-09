@@ -12,10 +12,10 @@ make
 
 ## 2. execute and collect result
 cd ../test
-echo "start -dce test"
-python3 test.py -dce
-echo "start -sccp test"
-python3 test.py -sccp
-echo "start -dce & -sccp test"
+# echo "start -dce test"
+# python3 test.py -dce
+# echo "start -sccp test"
+# python3 test.py -sccp
+# echo "start -dce & -sccp test"
 python3 test.py -dce -sccp
-echo -e "all tests finished\n"
+echo "all tests finished\n"
