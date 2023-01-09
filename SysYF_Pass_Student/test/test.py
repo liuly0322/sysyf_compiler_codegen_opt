@@ -122,10 +122,10 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
     if dir_succ:
         # 统计优化结果
         print('-----------OPT RESULT-----------')
-        print(f'\t{testcase_num} cases in this dir')
+        print(f'{testcase_num} cases in this dir')
         effective_num = len(statistic_line_count)
-        print(f'\t{effective_num} cases passed')
-        prompt1 = '\toptimization options: '
+        print(f'{effective_num} cases passed')
+        prompt1 = 'optimization options: '
         for opt_option in optimization:
             prompt1 += opt_option
         print(prompt1)
@@ -161,20 +161,20 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
             if opt_rate < time_best:
                 time_best = opt_rate
 
-        print('\tLine')
-        print(f'\t\t{line_better} cases better than no-opt')
-        print(f'\t\t{line_10_better} cases 10% better than no-opt')
-        print(f'\t\t{line_20_better} cases 20% better than no-opt')
-        print(f'\t\tbest opt-rate is {int(line_best*100)}%\n')
-        print('\tTime')
-        print(f'\t\t{time_better} cases better than no-opt')
-        print(f'\t\t{time_10_better} cases 10% better than no-opt')
-        print(f'\t\t{time_20_better} cases 20% better than no-opt')
-        print(f'\t\tbest opt-rate is {int(time_best*100)}%\n')
+        print('Line')
+        print(f'\t{line_better} cases better than no-opt')
+        print(f'\t{line_10_better} cases 10% better than no-opt')
+        print(f'\t{line_20_better} cases 20% better than no-opt')
+        print(f'\tbest opt-rate is {int(line_best*100)}%')
+        print('Time')
+        print(f'\t{time_better} cases better than no-opt')
+        print(f'\t{time_10_better} cases 10% better than no-opt')
+        print(f'\t{time_20_better} cases 20% better than no-opt')
+        print(f'\tbest opt-rate is {int(time_best*100)}%\n')
 
-        print('\tSuccess in dir {}'.format(TEST_BASE_PATH))
+        print('Success in dir {}'.format(TEST_BASE_PATH))
     else:
-        print('\tFail in dir {}'.format(TEST_BASE_PATH))
+        print('Fail in dir {}'.format(TEST_BASE_PATH))
 
     print('============TEST END============')
     return dir_succ
