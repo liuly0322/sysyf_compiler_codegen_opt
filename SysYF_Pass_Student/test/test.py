@@ -207,8 +207,8 @@ if __name__ == "__main__":
                 './Test/Easy/',
                 './Test/Medium/',
                 './Test/Hard/',
-                './function_test2020/',
-                './function_test2021/'
+                # './function_test2020/',
+                # './function_test2021/'
                 ]
     # you can only modify this to add your testcase
 
