@@ -9,4 +9,5 @@ add_library(
         PureFunction.cpp
         SCCP.cpp
         DeadCode.cpp
+        CSE.cpp
 )

@@ -1,5 +1,5 @@
 #include "ActiveVar.h"
-#include "SCCP.h"
+#include "CSE.h"
 #include "Check.h"
 #include "DeadCode.h"
 #include "DominateTree.h"
@@ -8,6 +8,7 @@
 #include "Mem2Reg.h"
 #include "Pass.h"
 #include "RDominateTree.h"
+#include "SCCP.h"
 #include "SyntaxTreeChecker.h"
 #include "SyntaxTreePrinter.h"
 #include "SysYFDriver.h"
@@ -20,7 +21,7 @@ void print_help(const std::string &exe_name) {
               << " <input-file>" << std::endl;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     IRBuilder builder;
     SysYFDriver driver;
     SyntaxTreePrinter printer;
@@ -30,13 +31,12 @@ int main(int argc, char* argv[]) {
     bool print_ast = false;
     bool emit_ir = false;
     bool check = false;
-    bool optimize_all = false;
     bool optimize = false;
 
-    // 适用于评估的优化Pass开关
-    bool av = false; // 活跃变量分析
-    bool dce = false; // 死代码消除
-    bool sccp = false; // 稀疏条件常量传播
+    bool av = false;
+    bool dce = false;
+    bool sccp = false;
+    bool cse = false;
 
     std::string filename = "-";
     std::string output_llvm_file = "-";
@@ -44,44 +44,37 @@ int main(int argc, char* argv[]) {
         if (argv[i] == std::string("-h") || argv[i] == std::string("--help")) {
             print_help(argv[0]);
             return 0;
-        }
-        else if (argv[i] == std::string("-p") || argv[i] == std::string("--trace_parsing")) {
+        } else if (argv[i] == std::string("-p") || argv[i] == std::string("--trace_parsing")) {
             driver.trace_parsing = true;
-        }
-        else if (argv[i] == std::string("-s") || argv[i] == std::string("--trace_scanning")) {
+        } else if (argv[i] == std::string("-s") || argv[i] == std::string("--trace_scanning")) {
             driver.trace_scanning = true;
-        }
-        else if (argv[i] == std::string("-emit-ast")) {
+        } else if (argv[i] == std::string("-emit-ast")) {
             print_ast = true;
-        }
-        else if (argv[i] == std::string("-emit-ir")) {
+        } else if (argv[i] == std::string("-emit-ir")) {
             emit_ir = true;
-        }
-        else if (argv[i] == std::string("-o")) {
+        } else if (argv[i] == std::string("-o")) {
             output_llvm_file = argv[++i];
-        }
-        else if (argv[i] == std::string("-check")) {
+        } else if (argv[i] == std::string("-check")) {
             check = true;
-        }
-        else if (argv[i] == std::string("-O2")) {
+        } else if (argv[i] == std::string("-O2")) {
             av = true;
             dce = true;
             sccp = true;
+            cse = true;
             optimize = true;
-        }
-        else if (argv[i] == std::string("-O")) {
+        } else if (argv[i] == std::string("-O")) {
             optimize = true;
-        }
-        else if (argv[i] == std::string("-av")) {
+        } else if (argv[i] == std::string("-av")) {
             av = true;
             optimize = true;
-        }
-        else if (argv[i] == std::string("-dce")) {
+        } else if (argv[i] == std::string("-dce")) {
             dce = true;
             optimize = true;
-        }
-        else if (argv[i] == std::string("-sccp")) {
+        } else if (argv[i] == std::string("-sccp")) {
             sccp = true;
+            optimize = true;
+        } else if (argv[i] == std::string("-cse")) {
+            cse = true;
             optimize = true;
         }
         //  ...
@@ -109,12 +102,17 @@ int main(int argc, char* argv[]) {
                 passmgr.addPass<ActiveVar>();
                 passmgr.addPass<Check>();
             }
-            if (dce) {
-                passmgr.addPass<DeadCode>();
-                passmgr.addPass<Check>();
-            }
+
             if (sccp) {
                 passmgr.addPass<SCCP>();
+                passmgr.addPass<Check>();
+            }
+            if (cse) {
+                passmgr.addPass<CSE>();
+                passmgr.addPass<Check>();
+            }
+            if (dce) {
+                passmgr.addPass<DeadCode>();
                 passmgr.addPass<Check>();
             }
             passmgr.execute();
@@ -123,8 +121,7 @@ int main(int argc, char* argv[]) {
         auto IR = m->print();
         if (output_llvm_file == "-") {
             std::cout << IR;
-        }
-        else {
+        } else {
             std::ofstream output_stream;
             output_stream.open(output_llvm_file, std::ios::out);
             output_stream << IR;

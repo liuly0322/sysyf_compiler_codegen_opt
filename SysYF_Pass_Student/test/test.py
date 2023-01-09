@@ -40,7 +40,7 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
         LL_PATH_OPT = TEST_BASE_PATH + case
         TEST_PATH_OPT = TEST_PATH
         for opt in optimization:
-            assert opt == "-dce" or opt == "-sccp"
+            assert opt == "-dce" or opt == "-sccp" or opt == "-cse"
             IRBuild_withopt += f' {opt}'
             LL_PATH_OPT += f'_{opt[1:]}'
             TEST_PATH_OPT += f'_{opt[1:]}'
@@ -222,6 +222,9 @@ if __name__ == "__main__":
             continue
         if opt == "-sccp":
             optimization["-sccp"] = True
+            continue
+        if opt == "-cse":
+            optimization["-cse"] = True
             continue
 
     # 失败的样例集
