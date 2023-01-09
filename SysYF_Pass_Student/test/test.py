@@ -19,8 +19,10 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
     statistic_line_count_opt = []
     statistic_run_time = []
     statistic_run_time_opt = []
+    testcase_names = []
     # 对每个测试样例
     for case in testcases:
+        testcase_names.append(case)
         print('Case %s:' % case, end='')
         TEST_PATH = TEST_BASE_PATH + case
         SY_PATH = TEST_BASE_PATH + case + '.sy'
@@ -127,17 +129,19 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
         print(f'{effective_num} cases passed')
         prompt1 = 'optimization options: '
         for opt_option in optimization:
-            prompt1 += opt_option
+            prompt1 += opt_option + ' '
         print(prompt1)
 
         line_better = 0
         line_10_better = 0
         line_20_better = 0
+        line_best_i = 0
         line_best = 1
 
         time_better = 0
         time_10_better = 0
         time_20_better = 0
+        time_best_i = 0
         time_best = 1
 
         for i in range(effective_num):
@@ -149,6 +153,7 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
             if opt_rate < 0.8:
                 line_20_better += 1
             if opt_rate < line_best:
+                line_best_i = i
                 line_best = opt_rate
             
             if statistic_run_time_opt[i] < statistic_run_time[i]:
@@ -159,18 +164,19 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
             if opt_rate < 0.8:
                 time_20_better += 1
             if opt_rate < time_best:
+                time_best_i = i
                 time_best = opt_rate
 
         print('Line')
         print(f'\t{line_better} cases better than no-opt')
         print(f'\t{line_10_better} cases 10% better than no-opt')
         print(f'\t{line_20_better} cases 20% better than no-opt')
-        print(f'\tbest opt-rate is {int(line_best*100)}%')
+        print(f'\tbest opt-rate is {int(line_best*100)}%, tesecase: {testcase_names[line_best_i]}')
         print('Time')
         print(f'\t{time_better} cases better than no-opt')
         print(f'\t{time_10_better} cases 10% better than no-opt')
         print(f'\t{time_20_better} cases 20% better than no-opt')
-        print(f'\tbest opt-rate is {int(time_best*100)}%\n')
+        print(f'\tbest opt-rate is {int(time_best*100)}%, tesecase: {testcase_names[time_best_i]}\n')
 
         print('Success in dir {}'.format(TEST_BASE_PATH))
     else:

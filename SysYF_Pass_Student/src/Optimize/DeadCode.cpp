@@ -10,7 +10,8 @@
 using PureFunction::is_pure;
 
 static inline void delete_basic_block(BasicBlock *i, BasicBlock *j) {
-    const std::vector<Use> uses{i->get_use_list().begin(), i->get_use_list().end()};
+    const std::vector<Use> uses{i->get_use_list().begin(),
+                                i->get_use_list().end()};
     for (const auto &use : uses) {
         // 可能是 phi 指令或者跳转指令
         // 跳转指令直接替换成 j 即可
@@ -201,64 +202,52 @@ void DeadCode::clean(Function *f) {
     do {
         changed = false;
         work_list.clear();
+        visited.clear();
         post_traverse(f->get_entry_block());
         for (auto *i : work_list) {
-            // 检查每个基本块的终止语句
+            // 先确保存在 br 语句
             auto *terminator = i->get_terminator();
             if (!terminator->is_br())
-                return;
+                continue;
             auto *br_inst = static_cast<BranchInst *>(terminator);
             if (br_inst->is_cond_br()) {
-                if (br_inst->get_operand(1) == br_inst->get_operand(2)) {
-                    // 相同的跳转目的地
-                    auto *target = br_inst->get_operand(1);
-                    br_inst->remove_operands(0, 2);
-                    br_inst->add_operand(target);
+                // 先尝试替换为 jmp
+                if (br_inst->get_operand(1) != br_inst->get_operand(2)) {
+                    continue;
                 }
+                // 相同的跳转目的地
+                auto *target = br_inst->get_operand(1);
+                br_inst->remove_operands(0, 2);
+                br_inst->add_operand(target);
             }
-            if (!br_inst->is_cond_br()) {
+
+            // 下面是对 i jmp 到 j 的优化，可能会删除 i
+            // 所以保证 i 不是入口基本块
+            if (i == f->get_entry_block())
+                continue;
+            auto *j = i->get_succ_basic_blocks().front();
+            if (i->get_instructions().size() == 1) {
+                // i 是空的，到 i 的跳转直接改为到 j 的跳转
+                // 这里要求 j 不能有 phi 指令
+                if (j->get_instructions().front()->is_phi())
+                    continue;
                 changed = true;
-                // i jump 到 j，可能会删除 cfg 结点，
-                // 规定：只能删除 i（保证迭代有效）
-                auto *j = i->get_succ_basic_blocks().front();
-                if (i->get_instructions().size() == 1) {
-                    // i 是空的
-                    // 到 i 的跳转直接改为到 j 的跳转
-                    delete_basic_block(i, j);
-                } else if (j->get_pre_basic_blocks().size() == 1) {
-                    // j 只有 i 一个前驱
-                    // 合并这两个基本块
-                    // 相当于把 i 「删除」，原有指令移到 j
-                    auto &i_insts = i->get_instructions();
-                    for (auto it = ++i_insts.rbegin(); it != i_insts.rend();
-                         ++it) {
-                        j->add_instr_begin(*it);
-                    }
-                    delete_basic_block(i, j);
-                } else if (j->get_instructions().size() == 1 &&
-                           j->get_terminator()->is_br() &&
-                           static_cast<BranchInst *>(j->get_terminator())
-                               ->is_cond_br()) {
-                    // j 是空的，且以条件跳转结束
-                    // 删除 i 和 j 之前的前驱后继关系
-                    i->remove_succ_basic_block(j);
-                    j->remove_pre_basic_block(i);
-                    // 建立新的 i 和 j 的后继的关系
-                    auto *true_bb = static_cast<BasicBlock *>(
-                        j->get_terminator()->get_operand(1));
-                    auto *false_bb = static_cast<BasicBlock *>(
-                        j->get_terminator()->get_operand(2));
-                    true_bb->add_pre_basic_block(i);
-                    false_bb->add_pre_basic_block(i);
-                    i->add_succ_basic_block(true_bb);
-                    i->add_succ_basic_block(false_bb);
-                    // 替换跳转指令
-                    auto *cond = j->get_terminator()->get_operand(0);
-                    i->get_terminator()->remove_operands(0, 0);
-                    i->get_terminator()->add_operand(cond);
-                    i->get_terminator()->add_operand(true_bb);
-                    i->get_terminator()->add_operand(false_bb);
+                delete_basic_block(i, j);
+            } else if (j->get_pre_basic_blocks().size() == 1) {
+                // j 只有 i 一个前驱，合并这两个基本块
+                changed = true;
+                // 相当于把 i 「删除」，原有指令移到 j
+                // 这里 j 可能有无用的 phi 指令，删除即可
+                while (j->get_instructions().front()->is_phi()) {
+                    auto *phi_inst = j->get_instructions().front();
+                    phi_inst->replace_all_use_with(phi_inst->get_operand(0));
+                    j->delete_instr(phi_inst);
                 }
+                auto &i_insts = i->get_instructions();
+                for (auto it = ++i_insts.rbegin(); it != i_insts.rend(); ++it) {
+                    j->add_instr_begin(*it);
+                }
+                delete_basic_block(i, j);
             }
         }
     } while (changed);

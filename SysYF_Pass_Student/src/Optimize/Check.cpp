@@ -1,6 +1,7 @@
 #include "Check.h"
 #include "Module.h"
 #include <algorithm>
+#include <unordered_set>
 
 void writeInfo(std::string message) { std::cout << "\033[36;1m" << message << "\033[0m "; }
 
@@ -148,7 +149,7 @@ void Check::checkPhiInstruction(Instruction *inst) {
     BasicBlock *bb = inst->get_parent();
     Function *fun = inst->get_function();
 
-    // auto &preds = inst->get_parent()->get_pre_basic_blocks();
+    auto preds = std::unordered_set<BasicBlock*>{bb->get_pre_basic_blocks().begin(), bb->get_pre_basic_blocks().end()};
 
     // Check nums of entry.
     // Verify(inst->get_operands().size() == preds.size() * 2,
@@ -159,6 +160,7 @@ void Check::checkPhiInstruction(Instruction *inst) {
     std::set<Value *> values;
     for (auto *opr : inst->get_operands()) {
         if (dynamic_cast<BasicBlock *>(opr) != nullptr) {
+            Verify(preds.count(static_cast<BasicBlock*>(opr)) != 0, "Useless phi operand!", inst, bb, fun);
             basicBlocks.insert(opr);
         } else {
             values.insert(opr); // include constant

@@ -1,4 +1,5 @@
 #include "SCCP.h"
+#include "BasicBlock.h"
 #include "Constant.h"
 #include "GlobalVariable.h"
 #include "Instruction.h"
@@ -143,6 +144,34 @@ Constant *const_fold(Instruction *inst, Constant *v, Module *module) {
     }
 }
 
+void branch_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
+                   BasicBlock *invalid_bb) {
+    // 无条件跳转至 jmp_bb
+    auto *bb = inst->get_parent();
+    bb->remove_succ_basic_block(invalid_bb);
+    invalid_bb->remove_pre_basic_block(bb);
+    inst->remove_operands(0, 2);
+    inst->add_operand(jmp_bb);
+    // invalid_bb 如果开头有当前 bb 来的 phi，则进行精简
+    auto occurs = std::vector<std::pair<Instruction *, int>>{};
+    for (auto *inst : invalid_bb->get_instructions()) {
+        if (!inst->is_phi())
+            break;
+        for (auto i = 0; i < inst->get_operands().size(); i++) {
+            auto *op = inst->get_operand(i);
+            if (op == bb)
+                occurs.emplace_back(inst, i);
+        }
+    }
+    for (auto [inst, i] : occurs) {
+        inst->remove_operands(i - 1, i);
+        if (inst->get_num_operand() == 2) {
+            inst->replace_all_use_with(inst->get_operand(0));
+            invalid_bb->delete_instr(inst);
+        }
+    }
+}
+
 ValueStatus get_mapped(std::unordered_map<Value *, ValueStatus> &value_map,
                        Value *key) {
     if (auto *constant = dynamic_cast<Constant *>(key))
@@ -188,7 +217,7 @@ void SCCP::sccp(Function *f, Module *module) {
     auto value_map = std::unordered_map<Value *, ValueStatus>{};
     auto cfg_work_list = std::vector<std::pair<BasicBlock *, BasicBlock *>>{
         {nullptr, f->get_entry_block()}};
-    auto ssa_work_list = std::vector<std::pair<Value *, Instruction *>>{};
+    auto ssa_work_list = std::vector<Instruction *>{};
     auto marked = std::unordered_set<std::pair<BasicBlock *, BasicBlock *>,
                                      hashFunction>{};
     // 初始化
@@ -222,7 +251,7 @@ void SCCP::sccp(Function *f, Module *module) {
             value_map[inst] = cur_status;
             for (auto use : inst->get_use_list()) {
                 auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-                ssa_work_list.emplace_back(inst, use_inst);
+                ssa_work_list.push_back(use_inst);
             }
         }
     };
@@ -278,7 +307,7 @@ void SCCP::sccp(Function *f, Module *module) {
                 value_map[inst] = cur_status;
                 for (auto use : inst->get_use_list()) {
                     auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-                    ssa_work_list.emplace_back(inst, use_inst);
+                    ssa_work_list.push_back(use_inst);
                 }
             }
         } else {
@@ -288,7 +317,7 @@ void SCCP::sccp(Function *f, Module *module) {
                 value_map[inst] = cur_status;
                 for (auto use : inst->get_use_list()) {
                     auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-                    ssa_work_list.emplace_back(inst, use_inst);
+                    ssa_work_list.push_back(use_inst);
                 }
             }
         }
@@ -299,9 +328,11 @@ void SCCP::sccp(Function *f, Module *module) {
     while (i < cfg_work_list.size() || j < ssa_work_list.size()) {
         while (i < cfg_work_list.size()) {
             auto [pre_bb, bb] = cfg_work_list[i++];
+
             if (marked.count({pre_bb, bb}) != 0)
                 continue;
             marked.insert({pre_bb, bb});
+
             for (auto *inst : bb->get_instructions()) {
                 if (inst->is_phi())
                     visit_phi(inst);
@@ -310,9 +341,12 @@ void SCCP::sccp(Function *f, Module *module) {
             }
         }
         while (j < ssa_work_list.size()) {
-            auto [pre_inst, inst] = ssa_work_list[j++];
+            auto *inst = ssa_work_list[j++];
+
+            // 如果指令已经是 bot 了，不需要再传播
             if (get_mapped(value_map, inst).status == ValueStatus::BOT)
                 continue;
+
             if (inst->is_phi())
                 visit_phi(inst);
             else
@@ -347,16 +381,10 @@ void SCCP::sccp(Function *f, Module *module) {
         auto *false_bb = static_cast<BasicBlock *>(terminator->get_operand(2));
         if (const_cond->get_value() != 0) {
             // 无条件跳转至真基本块
-            bb->remove_succ_basic_block(false_bb);
-            false_bb->remove_pre_basic_block(bb);
-            terminator->remove_operands(0, 2);
-            terminator->add_operand(true_bb);
+            branch_to_jmp(terminator, true_bb, false_bb);
         } else {
             // 无条件跳转至假基本块
-            bb->remove_succ_basic_block(true_bb);
-            true_bb->remove_pre_basic_block(bb);
-            terminator->remove_operands(0, 2);
-            terminator->add_operand(false_bb);
+            branch_to_jmp(terminator, false_bb, true_bb);
         }
     }
 }
