@@ -34,7 +34,7 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
         LL_PATH_OPT = TEST_BASE_PATH + case
         TEST_PATH_OPT = TEST_PATH
         for opt in optimization:
-            assert opt == "-av" or opt == "-dce" or opt == "-sccp"
+            assert opt == "-dce" or opt == "-sccp"
             IRBuild_withopt += f' {opt}'
             LL_PATH_OPT += f'_{opt[1:]}'
             TEST_PATH_OPT += f'_{opt[1:]}'
@@ -199,9 +199,6 @@ if __name__ == "__main__":
     opt_options = sys.argv[1:]
     optimization = {}
     for opt in opt_options:
-        if opt == "-av":
-            optimization["-av"] = True
-            continue
         if opt == "-dce":
             optimization["-dce"] = True
             continue
