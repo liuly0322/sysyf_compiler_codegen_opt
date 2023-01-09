@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-IRBuild_ptn = '"{}" "-emit-ir" "-o" "{}" "{}" "-O2"'
+IRBuild_ptn = '"{}" "-emit-ir" "-o" "{}" "{}" "-O"'
 ExeGen_ptn = '"clang" "{}" "-o" "{}" "{}" "../lib/lib.c"'
 Exe_ptn = '"{}"'
 
@@ -35,7 +35,7 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
         TEST_PATH_OPT = TEST_PATH
         for opt in optimization:
             assert opt == "-av" or opt == "-dce" or opt == "-sccp"
-            IRBuild_withopt += f' "{opt}"'
+            IRBuild_withopt += f' {opt}'
             LL_PATH_OPT += f'_{opt[1:]}'
             TEST_PATH_OPT += f'_{opt[1:]}'
         LL_PATH_OPT += '.ll'
