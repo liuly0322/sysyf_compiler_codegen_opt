@@ -180,16 +180,16 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
                 time_best_i = i
                 time_best = opt_rate
 
-        print(f'Line: {total_line_count} lines to {total_line_count_opt} lines, rate: {100 - int(total_line_count_opt / total_line_count * 100)}%')
+        print(f'Line: total {total_line_count} lines to {total_line_count_opt} lines, rate: {100 - int(total_line_count_opt / total_line_count * 100)}%')
         print(f'\t{line_better} cases better than no-opt')
         print(f'\t{line_10_better} cases 10% better than no-opt')
         print(f'\t{line_20_better} cases 20% better than no-opt')
-        print(f'\tbest opt-rate is {int(line_best*100)}%, tesecase: {testcase_names[line_best_i]}')
-        print('Time: {:.2f}s to {:.2f}s, rate: {}%'.format(total_run_time, total_run_time_opt, 100 - int(total_run_time_opt / total_run_time * 100)))
+        print(f'\tbest opt-rate is {100-int(line_best*100)}%, testcase: {testcase_names[line_best_i]}')
+        print('Time: total {:.2f}s to {:.2f}s, rate: {}%'.format(total_run_time, total_run_time_opt, 100 - int(total_run_time_opt / total_run_time * 100)))
         print(f'\t{time_better} cases better than no-opt')
         print(f'\t{time_10_better} cases 10% better than no-opt')
         print(f'\t{time_20_better} cases 20% better than no-opt')
-        print(f'\tbest opt-rate is {int(time_best*100)}%, tesecase: {testcase_names[time_best_i]}')
+        print(f'\tbest opt-rate is {100-int(time_best*100)}%, testcase: {testcase_names[time_best_i]}')
     else:
         print('Fail in dir {}'.format(TEST_BASE_PATH))
 
