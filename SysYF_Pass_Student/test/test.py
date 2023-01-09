@@ -201,6 +201,7 @@ if __name__ == "__main__":
 
     # you can only modify this to add your testcase
     TEST_DIRS = [
+                './student/testcases/',
                 './Test_H/Easy_H/',
                 './Test_H/Medium_H/',
                 './Test_H/Hard_H/',

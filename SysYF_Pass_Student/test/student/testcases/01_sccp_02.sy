@@ -1,0 +1,10 @@
+int main() {
+    int i = 20;
+    int j;
+    if (i > 10) {
+        j = 10;
+    } else {
+        j = 20;
+    }
+    return j;
+}
