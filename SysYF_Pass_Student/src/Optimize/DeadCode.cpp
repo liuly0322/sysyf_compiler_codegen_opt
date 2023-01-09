@@ -246,6 +246,7 @@ void DeadCode::clean(Function *f) {
                 auto &i_insts = i->get_instructions();
                 for (auto it = ++i_insts.rbegin(); it != i_insts.rend(); ++it) {
                     j->add_instr_begin(*it);
+                    (*it)->set_parent(j);
                 }
                 delete_basic_block(i, j);
             }

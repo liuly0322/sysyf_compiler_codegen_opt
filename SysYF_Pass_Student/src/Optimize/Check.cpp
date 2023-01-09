@@ -130,6 +130,7 @@ void Check::checkBasicBlock(BasicBlock *bb) {
             Verify(phi_list.count(inst), "PHINode is not grouped at top of basic block!", inst, bb, fun,
                    "\nHere is block content\n", bb->print());
         }
+        Verify(inst->get_parent() == bb, "Basic Block contains an instruction whose parent is not the bb!", inst, bb, fun);
         checkInstruction(inst);
     }
 
