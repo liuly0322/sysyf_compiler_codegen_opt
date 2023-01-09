@@ -347,6 +347,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
                 var = builder->create_alloca(var_type);
                 cur_fun_cur_block->get_instructions().pop_back();
                 cur_fun_entry_block->add_instruction(dynamic_cast<Instruction *>(var));
+                dynamic_cast<Instruction *>(var)->set_parent(cur_fun_entry_block);
                 if (tmp_terminator != nullptr) {
                     cur_fun_entry_block->add_instruction(tmp_terminator);
                 }
@@ -401,6 +402,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
                 var = builder->create_alloca(array_type);
                 cur_fun_cur_block->get_instructions().pop_back();
                 cur_fun_entry_block->add_instruction(dynamic_cast<Instruction *>(var));
+                dynamic_cast<Instruction *>(var)->set_parent(cur_fun_entry_block);
                 if (tmp_terminator != nullptr) {
                     cur_fun_entry_block->add_instruction(tmp_terminator);
                 }
