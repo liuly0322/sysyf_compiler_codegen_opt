@@ -18,4 +18,3 @@ cd ../test
 # python3 test.py -sccp
 # echo "start -dce & -sccp test"
 python3 test.py -dce -sccp -cse
-echo "all tests finished\n"

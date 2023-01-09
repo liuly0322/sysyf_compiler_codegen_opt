@@ -40,8 +40,8 @@ void markPure(Module *module) {
     std::vector<Function *> work_list;
     // 先考虑函数本身有无副作用，并将 worklists 初始化为非纯函数
     for (auto *f : functions) {
-        PureFunction::is_pure[f] = markPureInside(f);
-        if (!PureFunction::is_pure[f]) {
+        is_pure[f] = markPureInside(f);
+        if (!is_pure[f]) {
             work_list.push_back(f);
         }
     }
@@ -51,8 +51,8 @@ void markPure(Module *module) {
         for (auto &use : callee_function->get_use_list()) {
             auto *call_inst = dynamic_cast<CallInst *>(use.val_);
             auto *caller_function = call_inst->get_function();
-            if (PureFunction::is_pure[caller_function]) {
-                PureFunction::is_pure[caller_function] = false;
+            if (is_pure[caller_function]) {
+                is_pure[caller_function] = false;
                 work_list.push_back(caller_function);
             }
         }
