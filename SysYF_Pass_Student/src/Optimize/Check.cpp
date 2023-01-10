@@ -271,6 +271,7 @@ void Check::checkUse(User *user) {
         if (use_inst != nullptr) {
             Verify(use_inst->get_parent() != nullptr,
                    "Instruction referencing instruction/global value not embedded in a basic block!", user);
+            Verify(use_inst->get_operand(use.arg_no_) == user, "Wrong use number!", user, use_inst);
         } else {
             checkFailed("Use of instruction/global value is not an instruction!", user);
             return;

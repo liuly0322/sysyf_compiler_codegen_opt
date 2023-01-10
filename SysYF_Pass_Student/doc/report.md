@@ -678,9 +678,101 @@ void checkUse(User *user);
 ##### checkUse
 
 - 检查每一个使用该全局变量/定值的地方是否为合法的指令，主要为检查 `use_list` 是否有异常修改。
+- 检查使用该全局变量/定值的指令的指定操作数是否为该全局变量/定值。
 
 > 所有检查都已列举在上面，包括灵感来自自己编写的优化遍，就不再在 opt.md 中额外补充了
 
 最后在每一遍优化之后加入检查遍，来保证每一遍优化之后的 `IR` 依然符合约定。
 
 这里默认初始生成的 `IR` 没有问题(一开始通过对初始 `IR` 的检查来反馈我们的检查遍是否合理)。
+
+#### 花絮
+
+虽然前面一句说「默认初始生成的 `IR` 没有问题」，但本次实验中 `check.cpp` 成功协助我们找到了两处代码框架的 bug。
+
+第一处是 [User.cpp](../src/SysYFIR/User.cpp) 的 `remove_operands` 函数。
+
+```cpp
+void User::remove_operands(int index1,int index2){
+    for(int i=index1;i<=index2;i++){
+        operands_[i]->remove_use(this);
+    }
+    operands_.erase(operands_.begin()+index1,operands_.begin()+index2+1);
+    // std::cout<<operands_.size()<<std::endl;
+    num_ops_=operands_.size();
+}
+```
+
+这里的问题在于，假设对于一个 4 个操作数的 phi 指令：`%op = phi i32 [ %op1, %label1 ], [ %op2, %label2 ]`，我们删除第 0 到 1 个操作数，此时会发现原先的第 2 到 3 个操作数变成了第 0 到 1 个操作数，但它们的 `use.arg_no_` 仍然是原来的 2 和 3，并没有及时更新。
+
+为了解决这一问题，我们需要将 index2 下标之后的操作数也进行维护：
+
+```cpp
+void User::remove_operands(int index1,int index2){
+    // index2 之后的也要删，但是要加回去
+    auto backup = std::vector<Value*>{};
+    for (int i = index2 + 1; i < num_ops_; i++) {
+        backup.push_back(operands_[i]);
+    }
+    for(int i = index1; i < num_ops_; i++){
+        operands_[i]->remove_use(this);
+    }
+    operands_.erase(operands_.begin() + index1,operands_.begin() + num_ops_);
+    // std::cout<<operands_.size()<<std::endl;
+    num_ops_=operands_.size();
+    for (auto* op: backup) {
+        add_operand(op);
+    }
+}
+```
+
+第二处是 [IRBuilder.cpp](../src/SysYFIRBuilder/IRBuilder.cpp)。在创建 alloca 指令时，需要注意，如果当前不是起始基本块，则需要将新创建指令的 parent 设置为起始基本块。该文件中有三个这样的 alloca 语句，第一句设置了，但其他两句遗漏了。
+
+```cpp
+var = builder->create_alloca(array_type);
+cur_fun_cur_block->get_instructions().pop_back();
+cur_fun_entry_block->add_instruction(dynamic_cast<Instruction *>(var));
+// 设置 parent
+dynamic_cast<Instruction *>(var)->set_parent(cur_fun_entry_block);
+```
+
+### 其他
+
+[Mem2Reg.cpp](../src/Optimize/Mem2Reg.cpp) 中的 insideBlockForwarding 函数有些令人费解，以下是一个重构后的版本。
+
+```cpp
+void Mem2Reg::insideBlockForwarding() {
+    for (auto *bb : func_->get_basic_blocks()) {
+        const auto insts = std::vector<Instruction *>{
+            bb->get_instructions().begin(), bb->get_instructions().end()};
+
+        std::map<Value *, StoreInst *> defined_list;
+        for (auto *inst : insts) {
+            if (!isLocalVarOp(inst))
+                continue;
+
+            if (inst->get_instr_type() == Instruction::OpID::store) {
+                Value *lvalue = static_cast<StoreInst *>(inst)->get_lval();
+                auto *forwarded = defined_list[lvalue];
+                if (forwarded != nullptr)
+                    bb->delete_instr(forwarded);
+                defined_list[lvalue] = static_cast<StoreInst *>(inst);
+            } else if (inst->get_instr_type() == Instruction::OpID::load) {
+                Value *lvalue = static_cast<LoadInst *>(inst)->get_lval();
+                auto *forwarded = defined_list[lvalue];
+                if (forwarded == nullptr)
+                    continue;
+
+                Value *value = forwarded->get_rval();
+                for (auto use : inst->get_use_list()) {
+                    auto *user = static_cast<User *>(use.val_);
+                    user->set_operand(use.arg_no_, value);
+                }
+                bb->delete_instr(inst);
+            }
+        }
+    }
+}
+```
+
+只有 `defined_list` 是真正的核心，需要维护。
