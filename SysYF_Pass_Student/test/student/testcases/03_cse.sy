@@ -1,0 +1,17 @@
+int main() {
+        int x, y;
+    int a = 1;
+    int b = 5;
+    int c = a + b;
+    int d = a + b;
+    float e = 4.3 * a;
+    int flag = a + b;
+    if (flag) {
+        x = a * b;
+        y = a * b;
+    } else {
+        x = a - e;
+        y = a - e;
+    }
+    return (x + y);
+}
