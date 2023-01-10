@@ -89,7 +89,7 @@ void RDominateTree::get_bb_irdom(Function *f) {
     }
 
     for(auto bb:reverse_post_order){
-        bb->set_idom(rdoms[bb2int[bb]]);
+        bb->set_irdom(rdoms[bb2int[bb]]);
     }
 }
 

@@ -1031,6 +1031,463 @@ Time: total 0.10s to 0.09s, rate: 12%
 
 Muchnick, S.S. (2014) Advanced compiler design and implementation. Amsterdam etc.: Morgan Kaufmann Publishers an imprint of Elsevier.
 
+## Dead Code Elimination
+
+### 前言
+
+死代码消除也是一个常见的优化遍。选择添加 DCE 优化遍，原因如下：
+
+- 可以消除无用计算。
+- 可以消除无用控制流（空跳转基本块等）。
+- 可以消除无前驱非入口基本块。
+
+能消除控制流使得这一 pass 很适合承接在其他优化进行后。
+
+### 设计思想
+
+死代码消除分为两个部分：无用指令清理和无用控制流清理。
+
+无用指令清理基于逆向支配关系分析，是一个类似 GC 的 mark-sweep 两趟算法。
+
+首先明确一个概念：重要指令。重要指令包含会改编环境（全局变量或指针参数）的指令，I/O 指令，非纯函数调用（函数调用内部会改变环境或者有 I/O 指令）以及 ret 和 jmp 指令。
+
+同时，如果一个指令是重要的，那么它的所有操作数也是重要的。如果一个指令是重要的，那么它的反向支配前线的基本块的最后的 跳转语句也是 critical 的。
+
+重要指令相当于不能被消除的指令，我们从重要指令出发，进行反向数据流分析，就可以 mark 所有的重要指令。
+
+在 mark 完成后，执行 sweep 过程，删除其他未 mark 变量。
+
+我们实现的无用控制流清理主要处理以下四种情况：
+
+- i 以分支结尾，且两个分支是相同的
+- i jmp 到 j，且 i 是空基本块
+- i jmp 到 j，且 j 的前驱只有 i
+- i 没有前驱
+
+后三种情况的优化都会导致 cfg 改变，因此需要使用 changed 标记变量，循环遍历至不变为止。
+
+### 代码实现
+
+#### 重要指令判断
+
+注意考虑到纯函数的优化。
+
+```cpp
+bool DeadCode::is_critical_inst(Instruction *inst) {
+    if (inst->is_ret() ||
+        (inst->is_store() && PureFunction::store_to_alloca(inst) == nullptr)) {
+        return true;
+    }
+    if (inst->is_br()) {
+        auto *br_inst = dynamic_cast<BranchInst *>(inst);
+        // 一开始只有 jmp 需要标记
+        return !br_inst->is_cond_br();
+    }
+    if (inst->is_call()) {
+        // 只标记非纯函数的调用
+        auto *call_inst = dynamic_cast<CallInst *>(inst);
+        auto *callee = dynamic_cast<Function *>(call_inst->get_operand(0));
+        return !is_pure[callee];
+    }
+    return false;
+}
+```
+
+#### 纯函数分析
+
+纯函数的判断是一个 bfs 过程，初始内部有副作用的函数及只有声明的 I/O 函数都不是纯函数，而如果一个函数不是纯函数，那么所有调用它的函数也不是纯函数。
+
+主体流程：
+
+```cpp
+void markPure(Module *module) {
+    is_pure.clear();
+    auto functions = module->get_functions();
+    std::vector<Function *> work_list;
+    // 先考虑函数本身有无副作用，并将 worklists 初始化为非纯函数
+    for (auto *f : functions) {
+        is_pure[f] = markPureInside(f);
+        if (!is_pure[f]) {
+            work_list.push_back(f);
+        }
+    }
+    // 考虑非纯函数调用的「传染」
+    for (auto i = 0; i < work_list.size(); i++) {
+        auto *callee_function = work_list[i];
+        for (auto &use : callee_function->get_use_list()) {
+            auto *call_inst = dynamic_cast<CallInst *>(use.val_);
+            auto *caller_function = call_inst->get_function();
+            if (is_pure[caller_function]) {
+                is_pure[caller_function] = false;
+                work_list.push_back(caller_function);
+            }
+        }
+    }
+}
+```
+
+#### mark 流程
+
+主体代码：
+
+```cpp
+for (auto *bb : f->get_basic_blocks()) {
+    for (auto *inst : bb->get_instructions()) {
+        if (is_critical_inst(inst)) {
+            marked.insert(inst);
+            work_list.push_back(inst);
+        } else if (inst->is_store()) {
+            auto *lval = PureFunction::store_to_alloca(inst);
+            if (lval_store.count(lval) != 0) {
+                lval_store[lval].insert(static_cast<StoreInst *>(inst));
+            } else {
+                lval_store[lval] = {static_cast<StoreInst *>(inst)};
+            }
+        }
+    }
+}
+
+// 遍历 worklist
+for (auto i = 0; i < work_list.size(); i++) {
+    auto *inst = work_list[i];
+    // 如果数组左值 critical，则标记所有对数组的 store 也为 critical
+    if (inst->is_alloca()) {
+        auto *lval = static_cast<AllocaInst *>(inst);
+        for (auto *store_inst : lval_store[lval]) {
+            marked.insert(store_inst);
+            work_list.push_back(store_inst);
+        }
+        lval_store.erase(lval);
+    }
+    // mark 所有 operand
+    for (auto *op : inst->get_operands()) {
+        auto *def = dynamic_cast<Instruction *>(op);
+        if (def == nullptr || marked.count(def) != 0)
+            continue;
+        marked.insert(def);
+        work_list.push_back(def);
+    }
+    // mark rdf 的有条件跳转
+    auto *bb = inst->get_parent();
+    for (auto *rdomed_bb : bb->get_rdom_frontier()) {
+        auto *terminator = rdomed_bb->get_terminator();
+        if (marked.count(terminator) != 0)
+            continue;
+        marked.insert(terminator);
+        work_list.push_back(terminator);
+    }
+}
+```
+
+需要注意的是，函数内部数组的 store 指令一开始无法判断是否重要，需要先保存起来。
+
+#### sweep 流程
+
+此时可以清理没有被 mark 的变量了。
+
+```cpp
+void DeadCode::sweep(Function *f,
+                     const std::unordered_set<Instruction *> &marked) {
+    std::vector<Instruction *> delete_list{};
+    for (auto *bb : f->get_basic_blocks()) {
+        for (auto *op : bb->get_instructions()) {
+            if (marked.count(op) != 0)
+                continue;
+            if (!op->is_br()) {
+                delete_list.push_back(op);
+                continue;
+            }
+        }
+    }
+    for (auto *inst : delete_list)
+        inst->get_parent()->delete_instr(inst);
+}
+```
+
+#### 无用控制流清理
+
+具体见源文件，这里主要展示几种情况的分类。
+
+```cpp
+for (auto *i : work_list) {
+    // 先确保存在 br 语句
+    auto *terminator = i->get_terminator();
+    if (!terminator->is_br())
+        continue;
+    auto *br_inst = static_cast<BranchInst *>(terminator);
+    if (br_inst->is_cond_br()) {
+        // 先尝试替换为 jmp
+        // ......
+        // 若替换成功，可以继续执行下面代码
+    }
+
+    // 下面是对 i jmp 到 j 的优化
+    auto *j = i->get_succ_basic_blocks().front();
+    if (i->get_instructions().size() == 1) {
+        // i 是空的，到 i 的跳转直接改为到 j 的跳转
+        // ......
+    } else if (j->get_pre_basic_blocks().size() == 1) {
+        // j 只有 i 一个前驱，合并这两个基本块
+        // ......
+    }
+}
+```
+
+#### 无前驱基本块删除
+
+循环寻找无前驱非入口基本块删除即可。
+
+### 关键点分析
+
+需要注意：
+
+- 数组相当于取别名，因此一旦左值是重要变量，就要标记所有的 store 指令为重要变量
+- sweep 时需要正确维护前驱后继关系，这也是实验的难点。
+
+### 效果展示
+
+这里选取我们编写的测试样例 `student/testcases/02_pure_function.sy`。
+
+```c
+int b = 1;
+
+int foo1() {
+    // 这里可以有很多计算
+    int sum = 0;
+    int i = 0;
+    while (i < 100) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// 这个函数有副作用
+int foo2() {
+    b = b + 1;
+}
+
+int main() {
+    int i = 0;
+    int mark = 1;
+    while (i < 100000) {
+        foo1();
+        if (mark == 1) {
+            putint(3);
+            foo2();
+            mark = 0;
+        }
+        i = i + 1;
+    }
+    return 3;
+}
+```
+
+`foo1()` 是个纯函数，且本身不是关键变量，因此对它的调用被优化。
+
+生成 .ll 文件的 main 函数：
+
+```llvm
+define i32 @main() {
+label_entry:
+  br label %label4
+label_ret:                                                ; preds = %label4
+  ret i32 3
+label4:                                                ; preds = %label_entry, %label18
+  %op21 = phi i32 [ 1, %label_entry ], [ %op23, %label18 ]
+  %op22 = phi i32 [ 0, %label_entry ], [ %op20, %label18 ]
+  %op6 = icmp slt i32 %op22, 100000
+  %op7 = zext i1 %op6 to i32
+  %op8 = icmp ne i32 %op7, 0
+  br i1 %op8, label %label9, label %label_ret
+label9:                                                ; preds = %label4
+  %op12 = icmp eq i32 %op21, 1
+  %op13 = zext i1 %op12 to i32
+  %op14 = icmp ne i32 %op13, 0
+  br i1 %op14, label %label16, label %label18
+label16:                                                ; preds = %label9
+  call void @put_int(i32 3)
+  %op17 = call i32 @foo2()
+  br label %label18
+label18:                                                ; preds = %label9, %label16
+  %op23 = phi i32 [ %op21, %label9 ], [ 0, %label16 ]
+  %op20 = add i32 %op22, 1
+  br label %label4
+}
+```
+
+### 性能分析
+
+完整测试结果如下：
+
+```
+===========TEST START===========
+now in ./student/testcases/
+-----------OPT RESULT-----------
+5 cases in this dir
+5 cases passed
+optimization options: -dce
+Line: total 192 lines to 145 lines, rate: 25%
+        5 cases better than no-opt
+        4 cases 10% better than no-opt
+        2 cases 20% better than no-opt
+        best opt-rate is 45%, testcase: 01_sccp_03
+Time: total 0.03s to 0.01s, rate: 69%
+        3 cases better than no-opt
+        3 cases 10% better than no-opt
+        2 cases 20% better than no-opt
+        best opt-rate is 89%, testcase: 02_pure_function
+============TEST END============
+===========TEST START===========
+now in ./Test_H/Easy_H/
+-----------OPT RESULT-----------
+20 cases in this dir
+20 cases passed
+optimization options: -dce
+Line: total 398 lines to 368 lines, rate: 8%
+        9 cases better than no-opt
+        5 cases 10% better than no-opt
+        1 cases 20% better than no-opt
+        best opt-rate is 24%, testcase: 13_break
+Time: total 0.04s to 0.04s, rate: -2%
+        11 cases better than no-opt
+        7 cases 10% better than no-opt
+        1 cases 20% better than no-opt
+        best opt-rate is 24%, testcase: 04_arr_defn
+============TEST END============
+===========TEST START===========
+now in ./Test_H/Medium_H/
+-----------OPT RESULT-----------
+40 cases in this dir
+40 cases passed
+optimization options: -dce
+Line: total 3240 lines to 3013 lines, rate: 8%
+        29 cases better than no-opt
+        10 cases 10% better than no-opt
+        1 cases 20% better than no-opt
+        best opt-rate is 29%, testcase: short_circuit
+Time: total 0.08s to 0.08s, rate: 6%
+        23 cases better than no-opt
+        15 cases 10% better than no-opt
+        8 cases 20% better than no-opt
+        best opt-rate is 35%, testcase: skip_spaces
+============TEST END============
+===========TEST START===========
+now in ./Test_H/Hard_H/
+-----------OPT RESULT-----------
+10 cases in this dir
+10 cases passed
+optimization options: -dce
+Line: total 3751 lines to 3550 lines, rate: 6%
+        10 cases better than no-opt
+        1 cases 10% better than no-opt
+        0 cases 20% better than no-opt
+        best opt-rate is 19%, testcase: conv
+Time: total 41.96s to 41.73s, rate: 1%
+        5 cases better than no-opt
+        1 cases 10% better than no-opt
+        0 cases 20% better than no-opt
+        best opt-rate is 15%, testcase: side_effect
+============TEST END============
+===========TEST START===========
+now in ./Test/Easy/
+-----------OPT RESULT-----------
+20 cases in this dir
+20 cases passed
+optimization options: -dce
+Line: total 398 lines to 368 lines, rate: 8%
+        9 cases better than no-opt
+        5 cases 10% better than no-opt
+        1 cases 20% better than no-opt
+        best opt-rate is 24%, testcase: 13_break
+Time: total 0.05s to 0.05s, rate: 2%
+        12 cases better than no-opt
+        5 cases 10% better than no-opt
+        1 cases 20% better than no-opt
+        best opt-rate is 29%, testcase: 20_hanoi
+============TEST END============
+===========TEST START===========
+now in ./Test/Medium/
+-----------OPT RESULT-----------
+40 cases in this dir
+40 cases passed
+optimization options: -dce
+Line: total 2681 lines to 2507 lines, rate: 7%
+        28 cases better than no-opt
+        10 cases 10% better than no-opt
+        0 cases 20% better than no-opt
+        best opt-rate is 19%, testcase: while_break_test
+Time: total 0.10s to 0.09s, rate: 8%
+        28 cases better than no-opt
+        19 cases 10% better than no-opt
+        8 cases 20% better than no-opt
+        best opt-rate is 30%, testcase: nested_calls
+============TEST END============
+===========TEST START===========
+now in ./Test/Hard/
+-----------OPT RESULT-----------
+10 cases in this dir
+10 cases passed
+optimization options: -dce
+Line: total 1851 lines to 1669 lines, rate: 10%
+        9 cases better than no-opt
+        5 cases 10% better than no-opt
+        0 cases 20% better than no-opt
+        best opt-rate is 13%, testcase: brainfk
+Time: total 0.03s to 0.02s, rate: 5%
+        6 cases better than no-opt
+        3 cases 10% better than no-opt
+        1 cases 20% better than no-opt
+        best opt-rate is 28%, testcase: nested_calls2
+============TEST END============
+===========TEST START===========
+now in ./function_test2020/
+-----------OPT RESULT-----------
+67 cases in this dir
+67 cases passed
+optimization options: -dce
+Line: total 3742 lines to 3521 lines, rate: 6%
+        49 cases better than no-opt
+        12 cases 10% better than no-opt
+        2 cases 20% better than no-opt
+        best opt-rate is 24%, testcase: 60_while_fibonacci
+Time: total 0.16s to 0.16s, rate: 5%
+        42 cases better than no-opt
+        26 cases 10% better than no-opt
+        10 cases 20% better than no-opt
+        best opt-rate is 42%, testcase: 23_if_test2
+============TEST END============
+===========TEST START===========
+now in ./function_test2021/
+-----------OPT RESULT-----------
+37 cases in this dir
+37 cases passed
+optimization options: -dce
+Line: total 1394 lines to 1303 lines, rate: 7%
+        11 cases better than no-opt
+        6 cases 10% better than no-opt
+        0 cases 20% better than no-opt
+        best opt-rate is 20%, testcase: 049_unary_op
+Time: total 0.09s to 0.09s, rate: 7%
+        24 cases better than no-opt
+        16 cases 10% better than no-opt
+        9 cases 20% better than no-opt
+        best opt-rate is 39%, testcase: 052_comment1
+============TEST END============
+        All Tests Passed
+```
+
+可以看出 DCE 可以删除很多无用代码，平均能删除接近 10%。
+
+因为 DCE 能删除无用控制流和无前驱的非入口基本块，所以放在别的优化遍之后效果会更好。
+
+具体效率上很多样例也会有 10% 以上的提高。
+
+### 参考文献
+
+- Dead-Clean-SCCP (no date) Comp 512: Advanced compiler construction. Available at: https://www.clear.rice.edu/comp512/Lectures/ (Accessed: January 10, 2023).
+- Cooper, K.D. and Torczon, L. (no date) “10.2 Eliminating Useless and Unreachable Code,” in Engineering a Compiler 2nd edition, pp. 544–551.
+
 ## 新增源代码文件说明
 
 新编写 sy 源代码文件统一在 student/testcases 目录下，输入输出数据格式与其他测试用例文件夹保持一致。
