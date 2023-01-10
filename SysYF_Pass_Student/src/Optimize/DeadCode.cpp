@@ -1,4 +1,5 @@
 #include "DeadCode.h"
+#include "BasicBlock.h"
 #include "Instruction.h"
 #include "PureFunction.h"
 #include "Value.h"
@@ -10,9 +11,10 @@
 using PureFunction::is_pure;
 
 static inline void delete_basic_block(BasicBlock *i, BasicBlock *j) {
-    const std::vector<Use> uses{i->get_use_list().begin(),
-                                i->get_use_list().end()};
-    for (const auto &use : uses) {
+    auto &use_list = i->get_use_list();
+    while (!use_list.empty()) {
+        auto &use = use_list.front();
+        use_list.pop_front();
         // 可能是 phi 指令或者跳转指令
         // 跳转指令直接替换成 j 即可
         auto *inst = static_cast<Instruction *>(use.val_);
@@ -221,20 +223,52 @@ void DeadCode::clean(Function *f) {
                 br_inst->add_operand(target);
             }
 
-            // 下面是对 i jmp 到 j 的优化，可能会删除 i
-            // 所以保证 i 不是入口基本块
-            if (i == f->get_entry_block())
-                continue;
+            // 下面是对 i jmp 到 j 的优化
             auto *j = i->get_succ_basic_blocks().front();
             if (i->get_instructions().size() == 1) {
                 // i 是空的，到 i 的跳转直接改为到 j 的跳转
-                // 这里要求 j 不能有 phi 指令
-                if (j->get_instructions().front()->is_phi())
+
+                // 会删除 i, 所以保证 i 不是入口基本块
+                if (i == f->get_entry_block())
                     continue;
+
+                // 这里要求 j 不能有同时含有 i 和 i 前驱作为操作数的 phi 指令
+                const std::unordered_set<Value *> pres{
+                    i->get_pre_basic_blocks().begin(),
+                    i->get_pre_basic_blocks().end()};
+                bool has_both_pre_and_i = false;
+
+                for (auto *j_inst : j->get_instructions()) {
+                    auto *phi_inst = dynamic_cast<PhiInst *>(j_inst);
+                    if (phi_inst == nullptr)
+                        break;
+
+                    auto has_pre = false;
+                    auto has_i = false;
+                    for (auto *phi_operand : phi_inst->get_operands()) {
+                        if (pres.count(phi_operand) != 0)
+                            has_pre = true;
+                        if (phi_operand == i)
+                            has_i = true;
+                    }
+
+                    if (has_pre && has_i) {
+                        has_both_pre_and_i = true;
+                        break;
+                    }
+                }
+                if (has_both_pre_and_i)
+                    continue;
+
                 changed = true;
                 delete_basic_block(i, j);
             } else if (j->get_pre_basic_blocks().size() == 1) {
                 // j 只有 i 一个前驱，合并这两个基本块
+
+                // 会删除 i, 所以保证 i 不是入口基本块
+                if (i == f->get_entry_block())
+                    continue;
+
                 changed = true;
                 // 相当于把 i 「删除」，原有指令移到 j
                 // 这里 j 可能有无用的 phi 指令，删除即可
@@ -252,4 +286,41 @@ void DeadCode::clean(Function *f) {
             }
         }
     } while (changed);
+
+    auto delete_list = std::vector<BasicBlock *>{};
+    do {
+        delete_list.clear();
+        for (auto it = ++f->get_basic_blocks().begin();
+             it != f->get_basic_blocks().end(); ++it) {
+            auto *bb = *it;
+            if (bb->get_pre_basic_blocks().empty()) {
+                // 删除 bb 后继与它的前驱后继关系
+                for (auto *succ : bb->get_succ_basic_blocks()) {
+                    succ->remove_pre_basic_block(bb);
+                    // succ 开头如果有用到 bb 的 phi 指令，也需要删除
+                    auto delete_phi = std::vector<Instruction *>{};
+                    for (auto *inst : succ->get_instructions()) {
+                        if (!inst->is_phi())
+                            break;
+                        for (auto i = 1; i < inst->get_operands().size();) {
+                            auto *op = inst->get_operand(i);
+                            if (op == bb) {
+                                inst->remove_operands(i - 1, i);
+                            } else {
+                                i += 2;
+                            }
+                        }
+                    }
+                    for (auto *inst : delete_phi) {
+                        succ->delete_instr(inst);
+                    }
+                }
+                bb->get_succ_basic_blocks().clear();
+                delete_list.push_back(bb);
+            }
+        }
+        for (auto *bb : delete_list) {
+            f->remove(bb);
+        }
+    } while (!delete_list.empty());
 }

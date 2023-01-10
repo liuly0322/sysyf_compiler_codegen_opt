@@ -1,4 +1,5 @@
 #include "User.h"
+#include <vector>
 #ifdef DEBUG
 #include <cassert>
 #endif
@@ -51,10 +52,18 @@ void User::remove_use_of_ops()
 }
 
 void User::remove_operands(int index1,int index2){
-    for(int i=index1;i<=index2;i++){
+    // index2 之后的也要删，但是要加回去
+    auto backup = std::vector<Value*>{};
+    for (int i = index2 + 1; i < num_ops_; i++) {
+        backup.push_back(operands_[i]);
+    }
+    for(int i = index1; i < num_ops_; i++){
         operands_[i]->remove_use(this);
     }
-    operands_.erase(operands_.begin()+index1,operands_.begin()+index2+1);
+    operands_.erase(operands_.begin() + index1,operands_.begin() + num_ops_);
     // std::cout<<operands_.size()<<std::endl;
     num_ops_=operands_.size();
+    for (auto* op: backup) {
+        add_operand(op);
+    }
 }

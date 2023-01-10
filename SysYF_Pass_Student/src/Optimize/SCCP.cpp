@@ -153,22 +153,25 @@ void branch_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
     inst->remove_operands(0, 2);
     inst->add_operand(jmp_bb);
     // invalid_bb 如果开头有当前 bb 来的 phi，则进行精简
-    auto occurs = std::vector<std::pair<Instruction *, int>>{};
+    auto delete_list = std::vector<Instruction *>{};
     for (auto *inst : invalid_bb->get_instructions()) {
         if (!inst->is_phi())
             break;
-        for (auto i = 0; i < inst->get_operands().size(); i++) {
+        for (auto i = 1; i < inst->get_operands().size();) {
             auto *op = inst->get_operand(i);
-            if (op == bb)
-                occurs.emplace_back(inst, i);
+            if (op == bb) {
+                inst->remove_operands(i - 1, i);
+            } else {
+                i += 2;
+            }
         }
-    }
-    for (auto [inst, i] : occurs) {
-        inst->remove_operands(i - 1, i);
         if (inst->get_num_operand() == 2) {
             inst->replace_all_use_with(inst->get_operand(0));
-            invalid_bb->delete_instr(inst);
+            delete_list.push_back(inst);
         }
+    }
+    for (auto *inst : delete_list) {
+        invalid_bb->delete_instr(inst);
     }
 }
 
