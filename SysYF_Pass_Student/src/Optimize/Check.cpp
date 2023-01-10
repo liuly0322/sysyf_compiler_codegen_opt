@@ -130,7 +130,8 @@ void Check::checkBasicBlock(BasicBlock *bb) {
             Verify(phi_list.count(inst), "PHINode is not grouped at top of basic block!", inst, bb, fun,
                    "\nHere is block content\n", bb->print());
         }
-        Verify(inst->get_parent() == bb, "Basic Block contains an instruction whose parent is not the bb!", inst, bb, fun);
+        Verify(inst->get_parent() == bb, "Basic Block contains an instruction whose parent is not the bb!", inst, bb,
+               fun);
         checkInstruction(inst);
     }
 
@@ -150,7 +151,7 @@ void Check::checkPhiInstruction(Instruction *inst) {
     BasicBlock *bb = inst->get_parent();
     Function *fun = inst->get_function();
 
-    auto preds = std::unordered_set<BasicBlock*>{bb->get_pre_basic_blocks().begin(), bb->get_pre_basic_blocks().end()};
+    auto preds = std::unordered_set<BasicBlock *>{bb->get_pre_basic_blocks().begin(), bb->get_pre_basic_blocks().end()};
 
     // Check nums of entry.
     // Verify(inst->get_operands().size() == preds.size() * 2,
@@ -161,7 +162,7 @@ void Check::checkPhiInstruction(Instruction *inst) {
     std::set<Value *> values;
     for (auto *opr : inst->get_operands()) {
         if (dynamic_cast<BasicBlock *>(opr) != nullptr) {
-            Verify(preds.count(static_cast<BasicBlock*>(opr)) != 0, "Useless phi operand!", inst, bb, fun);
+            Verify(preds.count(static_cast<BasicBlock *>(opr)) != 0, "Useless phi operand!", inst, bb, fun);
             basicBlocks.insert(opr);
         } else {
             values.insert(opr); // include constant

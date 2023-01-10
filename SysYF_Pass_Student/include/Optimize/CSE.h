@@ -8,6 +8,7 @@
 #include "Instruction.h"
 #include "Module.h"
 #include "Pass.h"
+#include "PureFunction.h"
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -18,8 +19,9 @@ class Expression {
   public:
     std::set<Instruction *> source;
     Instruction::OpID type;
+    Instruction *inst;
     std::vector<Value *> &operands;
-    Expression(Instruction *inst) : type(inst->get_instr_type()), operands(inst->get_operands()) {
+    Expression(Instruction *inst) : type(inst->get_instr_type()), inst(inst), operands(inst->get_operands()) {
         source.insert(inst);
     }
     bool operator==(const Expression &expr) const {
@@ -28,6 +30,21 @@ class Expression {
         }
         if (operands.size() != expr.operands.size()) {
             return false;
+        }
+        // Cmp
+        if (inst->is_cmp()) {
+            auto *cmpInst1 = dynamic_cast<CmpInst *>(inst);
+            auto *cmpInst2 = dynamic_cast<CmpInst *>(expr.inst);
+            if (cmpInst1->get_cmp_op() != cmpInst2->get_cmp_op()) {
+                return false;
+            }
+        }
+        if (inst->is_fcmp()) {
+            auto *fcmpInst1 = dynamic_cast<FCmpInst *>(inst);
+            auto *fcmpInst2 = dynamic_cast<FCmpInst *>(expr.inst);
+            if (fcmpInst1->get_cmp_op() != fcmpInst2->get_cmp_op()) {
+                return false;
+            }
         }
         for (auto i = 0; i < operands.size(); ++i) {
             auto *op1 = operands[i], *op2 = expr.operands[i];
@@ -51,6 +68,10 @@ class Expression {
             }
             // Other Case: Function / BasicBlock / Instruction
             if (op1 != op2) {
+                // if (inst->is_load()) {
+                // std::cout << inst->print() << " " << expr.inst->print() << "\n";
+                // std::cout << op1->get_name() << " " << op2->get_name() << "\n";
+                // }
                 return false;
             }
         }
@@ -71,7 +92,10 @@ class CSE : public Pass {
   public:
     CSE(Module *m) : Pass(m){};
     void execute() final;
-    Instruction *isAppear(BasicBlock *, Instruction *);
+    bool cmp(Instruction *inst1, Instruction *inst2);
+    Value *findOrigin(Value *val);
+    Instruction *isAppear(Instruction *inst, std::vector<Instruction *> &insts, int index);
+    bool isKill(Instruction *inst, std::vector<Instruction *> &insts, int index);
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
     void calcGenKill(Function *fun);
@@ -83,8 +107,16 @@ class CSE : public Pass {
 
     const std::string get_name() const override { return name; }
     bool isOptmized(Instruction *inst) {
-        return !(inst->is_void() || inst->is_alloca() || inst->is_load() || inst->is_cmp() || inst->is_call() ||
-                 inst->is_zext());
+        if (inst->is_void() || inst->is_alloca()) {
+            return false;
+        }
+        if (inst->is_call() && !PureFunction::is_pure[dynamic_cast<Function *>(inst->get_operand(0))]) {
+            return false;
+        }
+        if (inst->is_load() && dynamic_cast<GlobalVariable *>(inst->get_operand(0))) {
+            return false;
+        }
+        return true;
     }
 };
 
