@@ -113,7 +113,7 @@ class CSE : public Pass {
         if (inst->is_call() && !PureFunction::is_pure[dynamic_cast<Function *>(inst->get_operand(0))]) {
             return false;
         }
-        if (inst->is_load() && dynamic_cast<GlobalVariable *>(inst->get_operand(0))) {
+        if (inst->is_load() && (dynamic_cast<GlobalVariable *>(inst->get_operand(0)) || dynamic_cast<Argument *>(inst->get_operand(0)))) {
             return false;
         }
         return true;
