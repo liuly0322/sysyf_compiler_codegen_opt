@@ -224,9 +224,6 @@ void SCCP::sccp(Function *f, Module *module) {
     auto marked = std::unordered_set<std::pair<BasicBlock *, BasicBlock *>,
                                      hashFunction>{};
     // 初始化
-    for (auto *arg : f->get_args()) {
-        value_map.insert({arg, ValueStatus{ValueStatus::BOT}});
-    }
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *expr : bb->get_instructions()) {
             value_map.insert({expr, ValueStatus{ValueStatus::TOP}});
