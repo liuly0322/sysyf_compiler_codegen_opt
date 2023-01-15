@@ -43,11 +43,9 @@ bool DeadCode::is_critical_inst(Instruction *inst) {
         (inst->is_store() && PureFunction::store_to_alloca(inst) == nullptr)) {
         return true;
     }
-    if (inst->is_br()) {
-        auto *br_inst = dynamic_cast<BranchInst *>(inst);
-        // 一开始只有 jmp 需要标记
-        return !br_inst->is_cond_br();
-    }
+    if (inst->is_br() &&
+        inst->get_parent() == inst->get_function()->get_entry_block())
+        return true;
     if (inst->is_call()) {
         // 只标记非纯函数的调用
         auto *call_inst = dynamic_cast<CallInst *>(inst);
@@ -109,12 +107,20 @@ std::unordered_set<Instruction *> DeadCode::mark(Function *f) {
         // mark 所有 operand
         for (auto *op : inst->get_operands()) {
             auto *def = dynamic_cast<Instruction *>(op);
-            if (def == nullptr || marked.count(def) != 0)
-                continue;
-            marked.insert(def);
-            work_list.push_back(def);
+            auto *bb = dynamic_cast<BasicBlock *>(op);
+            if (def != nullptr && marked.count(def) == 0) {
+                marked.insert(def);
+                work_list.push_back(def);
+            }
+            if (bb != nullptr) {
+                auto *terminator = bb->get_terminator();
+                if (marked.count(terminator) == 0) {
+                    marked.insert(terminator);
+                    work_list.push_back(terminator);
+                }
+            }
         }
-        // mark rdf 的有条件跳转
+        // mark rdf 的跳转
         auto *bb = inst->get_parent();
         for (auto *rdomed_bb : bb->get_rdom_frontier()) {
             auto *terminator = rdomed_bb->get_terminator();
@@ -135,7 +141,7 @@ void DeadCode::sweep(Function *f,
         for (auto *op : bb->get_instructions()) {
             if (marked.count(op) != 0)
                 continue;
-            if (!op->is_br()) {
+            if (!op->is_br() || op->get_num_operand() != 3) {
                 delete_list.push_back(op);
                 continue;
             }
@@ -225,7 +231,7 @@ void DeadCode::clean(Function *f) {
 
             // 下面是对 i jmp 到 j 的优化
             auto *j = i->get_succ_basic_blocks().front();
-            if (i->get_instructions().size() == 1) {
+            if (i->get_num_of_instr() == 1) {
                 // i 是空的，到 i 的跳转直接改为到 j 的跳转
 
                 // 会删除 i, 所以保证 i 不是入口基本块
@@ -283,6 +289,48 @@ void DeadCode::clean(Function *f) {
                     (*it)->set_parent(j);
                 }
                 delete_basic_block(i, j);
+            } else if (j->get_num_of_instr() == 1) {
+                // j 是空基本块
+                // 如果 j 末尾是分支，则可以提升分支
+                auto *j_terminator = j->get_terminator();
+                auto *j_br = dynamic_cast<BranchInst *>(j_terminator);
+                if (j_br == nullptr)
+                    continue;
+                if (!j_br->is_cond_br())
+                    continue;
+
+                changed = true;
+                auto *cond = j_br->get_operand(0);
+                auto *true_bb = static_cast<BasicBlock *>(j_br->get_operand(1));
+                auto *false_bb =
+                    static_cast<BasicBlock *>(j_br->get_operand(2));
+                terminator->remove_operands(0, 0);
+                terminator->add_operand(cond);
+                terminator->add_operand(true_bb);
+                terminator->add_operand(false_bb);
+                i->remove_succ_basic_block(j);
+                j->remove_pre_basic_block(i);
+
+                auto connect = [&](BasicBlock *dst) {
+                    i->add_succ_basic_block(dst);
+                    dst->add_pre_basic_block(i);
+
+                    // 如果有 j 的 phi operand，给 i 也来一份
+                    for (auto *inst : dst->get_instructions()) {
+                        if (!inst->is_phi())
+                            break;
+                        for (auto index = 1; index < inst->get_num_operand();
+                             index += 2) {
+                            if (inst->get_operand(index) == j) {
+                                inst->add_operand(inst->get_operand(index - 1));
+                                inst->add_operand(i);
+                                break;
+                            }
+                        }
+                    }
+                };
+                connect(true_bb);
+                connect(false_bb);
             }
         }
     } while (changed);
