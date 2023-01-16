@@ -1,0 +1,24 @@
+ame: auto opt test
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        run: |
+          sudo apt install build-essential clang cmake
+      - name: Run opt test script
+        run: |
+          cd SysYF_Pass_Student/test/student && sh eval.sh
