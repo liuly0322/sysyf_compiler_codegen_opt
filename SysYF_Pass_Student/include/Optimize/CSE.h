@@ -46,7 +46,7 @@ class Expression {
                 return false;
             }
         }
-        for (auto i = 0; i < operands.size(); ++i) {
+        for (auto i = 0U; i < operands.size(); ++i) {
             auto *op1 = operands[i], *op2 = expr.operands[i];
             // Int Constant
             auto *iconst1 = dynamic_cast<ConstantInt *>(op1);
@@ -95,7 +95,7 @@ class CSE : public Pass {
     bool cmp(Instruction *inst1, Instruction *inst2);
     Value *findOrigin(Value *val);
     Instruction *isAppear(Instruction *inst, std::vector<Instruction *> &insts, int index);
-    bool isKill(Instruction *inst, std::vector<Instruction *> &insts, int index);
+    bool isKill(Instruction *inst, std::vector<Instruction *> &insts, unsigned index);
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
     void calcGenKill(Function *fun);

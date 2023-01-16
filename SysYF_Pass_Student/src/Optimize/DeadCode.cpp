@@ -92,7 +92,7 @@ void DeadCode::mark(Function *f) {
     }
 
     // 遍历 worklist
-    for (auto i = 0; i < work_list.size(); i++) {
+    for (auto i = 0U; i < work_list.size(); i++) {
         auto *inst = work_list[i];
         // 如果数组左值 critical，则标记所有对数组的 store 也为 critical
         if (inst->is_alloca()) {
@@ -299,7 +299,7 @@ bool DeadCode::clean(Function *f) {
                 for (auto *inst : dst->get_instructions()) {
                     if (!inst->is_phi())
                         break;
-                    for (auto index = 1; index < inst->get_num_operand();
+                    for (auto index = 1U; index < inst->get_num_operand();
                          index += 2) {
                         if (inst->get_operand(index) == j) {
                             inst->add_operand(inst->get_operand(index - 1));

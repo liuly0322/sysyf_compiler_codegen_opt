@@ -131,7 +131,7 @@ std::string Type::print(){
     case FunctionTyID:
         type_ir += static_cast<FunctionType *>(this)->get_return_type()->print();
         type_ir += " (";
-        for( int i = 0 ; i < static_cast<FunctionType *>(this)->get_num_of_args() ; i++)
+        for( auto i = 0U ; i < static_cast<FunctionType *>(this)->get_num_of_args() ; i++)
         {
             if(i)
                 type_ir += ", ";

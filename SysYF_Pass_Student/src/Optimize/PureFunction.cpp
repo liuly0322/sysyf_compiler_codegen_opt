@@ -46,7 +46,7 @@ void markPure(Module *module) {
         }
     }
     // 考虑非纯函数调用的「传染」
-    for (auto i = 0; i < work_list.size(); i++) {
+    for (auto i = 0U; i < work_list.size(); i++) {
         auto *callee_function = work_list[i];
         for (auto &use : callee_function->get_use_list()) {
             auto *call_inst = dynamic_cast<CallInst *>(use.val_);

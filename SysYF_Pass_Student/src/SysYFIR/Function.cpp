@@ -57,7 +57,7 @@ void Function::build_args()
 {
     auto *func_ty = get_function_type();
     unsigned num_args = get_num_of_args();
-    for (int i = 0; i < num_args; i++) {
+    for (auto i = 0U; i < num_args; i++) {
         arguments_.push_back(new Argument(func_ty->get_param_type(i), "", this, i));
     }
 }
@@ -127,7 +127,7 @@ std::string Function::print()
     //print arg
     if ( this->is_declaration() ) 
     {
-        for ( int i = 0 ; i < this->get_num_of_args() ; i++)
+        for ( auto i = 0U ; i < this->get_num_of_args() ; i++)
         {
             if(i)
                 func_ir += ", ";

@@ -12,13 +12,13 @@
 
 Instruction::Instruction(Type *ty, OpID id, unsigned num_ops,
                         BasicBlock *parent)
-    : User(ty, "", num_ops), op_id_(id), num_ops_(num_ops), parent_(parent)
+    : User(ty, "", num_ops), parent_(parent), op_id_(id), num_ops_(num_ops)
 {
     parent_->add_instruction(this);
 }
 
 Instruction::Instruction(Type *ty, OpID id, unsigned num_ops)
-    : User(ty, "", num_ops), op_id_(id), num_ops_(num_ops), parent_(nullptr)
+    : User(ty, "", num_ops), parent_(nullptr), op_id_(id), num_ops_(num_ops)
 {
 
 }
@@ -238,7 +238,7 @@ std::string CallInst::print()
 #endif
     instr_ir += print_as_op(this->get_operand(0), false);
     instr_ir += "(";
-    for (int i = 1; i < this->get_num_operand(); i++)
+    for (auto i = 1U; i < this->get_num_operand(); i++)
     {
         if( i > 1 )
             instr_ir += ", ";
@@ -368,7 +368,7 @@ GetElementPtrInst::GetElementPtrInst(Value *ptr, std::vector<Value *> idxs, Basi
                 1 + idxs.size(), bb)
 {
     set_operand(0, ptr);
-    for (int i = 0; i < idxs.size(); i++) {
+    for (auto i = 0U; i < idxs.size(); i++) {
         set_operand(i + 1, idxs[i]);
     }
     element_ty_ = get_element_type(ptr, idxs);
@@ -381,7 +381,7 @@ Type *GetElementPtrInst::get_element_type(Value *ptr, std::vector<Value *> idxs)
     if (ty->is_array_type())
     {
         ArrayType *arr_ty = static_cast<ArrayType *>(ty);
-        for (int i = 1; i < idxs.size(); i++) {
+        for (auto i = 1U; i < idxs.size(); i++) {
             ty = arr_ty->get_element_type();
             if (i < idxs.size() - 1) {
 #ifdef DEBUG
@@ -419,7 +419,7 @@ std::string GetElementPtrInst::print()
 #endif
     instr_ir += this->get_operand(0)->get_type()->get_pointer_element_type()->print();
     instr_ir += ", ";
-    for (int i = 0; i < this->get_num_operand(); i++)
+    for (auto i = 0U; i < this->get_num_operand(); i++)
     {
         if( i > 0 )
             instr_ir += ", ";
@@ -620,7 +620,7 @@ std::string SiToFpInst::print()
 PhiInst::PhiInst(OpID op, std::vector<Value *> vals, std::vector<BasicBlock *> val_bbs, Type *ty, BasicBlock *bb)
     : Instruction(ty, op, 2*vals.size() )
 {
-    for ( int i = 0; i < vals.size(); i++)
+    for ( auto i = 0U; i < vals.size(); i++)
     {
         set_operand(2*i, vals[i]);
         set_operand(2*i+1, val_bbs[i]);
@@ -645,7 +645,7 @@ std::string PhiInst::print()
     instr_ir += " ";
     instr_ir += this->get_operand(0)->get_type()->print();
     instr_ir += " ";
-    for (int i = 0; i < this->get_num_operand()/2; i++)
+    for (auto i = 0U; i < this->get_num_operand()/2; i++)
     {
         if( i > 0 )
             instr_ir += ", ";

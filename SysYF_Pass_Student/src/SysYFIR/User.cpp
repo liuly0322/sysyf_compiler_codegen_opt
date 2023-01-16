@@ -51,13 +51,13 @@ void User::remove_use_of_ops()
     }
 }
 
-void User::remove_operands(int index1,int index2){
+void User::remove_operands(unsigned index1, unsigned index2){
     // index2 之后的也要删，但是要加回去
     auto backup = std::vector<Value*>{};
-    for (int i = index2 + 1; i < num_ops_; i++) {
+    for (auto i = index2 + 1; i < num_ops_; i++) {
         backup.push_back(operands_[i]);
     }
-    for(int i = index1; i < num_ops_; i++){
+    for (auto i = index1; i < num_ops_; i++){
         operands_[i]->remove_use(this);
     }
     operands_.erase(operands_.begin() + index1,operands_.begin() + num_ops_);

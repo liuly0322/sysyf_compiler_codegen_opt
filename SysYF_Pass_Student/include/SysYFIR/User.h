@@ -23,7 +23,7 @@ public:
     unsigned get_num_operand() const;
 
     void remove_use_of_ops();
-    void remove_operands(int index1,int index2);
+    void remove_operands(unsigned index1, unsigned index2);
 
 private:
     // std::unique_ptr< std::list<Value *> > operands_;   // operands of this value

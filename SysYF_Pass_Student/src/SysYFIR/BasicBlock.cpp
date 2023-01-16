@@ -32,7 +32,7 @@ void BasicBlock::remove_phi_from(BasicBlock *bb) {
     for (auto *inst : instr_list_) {
         if (!inst->is_phi())
             break;
-        for (auto i = 1; i < inst->get_operands().size();) {
+        for (auto i = 1U; i < inst->get_operands().size();) {
             auto *op = inst->get_operand(i);
             if (op == bb) {
                 inst->remove_operands(i - 1, i);

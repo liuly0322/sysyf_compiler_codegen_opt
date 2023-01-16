@@ -45,7 +45,7 @@ std::string ConstantFloat::print()
 ConstantArray::ConstantArray(ArrayType *ty, const std::vector<Constant*> &val)
     : Constant(ty, "", val.size()) 
 {
-    for (int i = 0; i < val.size(); i++)
+    for (auto i = 0U; i < val.size(); i++)
         set_operand(i, val[i]);
     this->const_array.assign(val.begin(),val.end());
 }
@@ -66,7 +66,7 @@ std::string ConstantArray::print()
     const_ir += this->get_type()->get_array_element_type()->print();
     const_ir += " ";
     const_ir += get_element_value(0)->print();
-    for ( int i = 1 ; i < this->get_size_of_array() ; i++ ){
+    for ( auto i = 1U ; i < this->get_size_of_array() ; i++ ){
         const_ir += ", ";
         const_ir += this->get_type()->get_array_element_type()->print();
         const_ir += " ";

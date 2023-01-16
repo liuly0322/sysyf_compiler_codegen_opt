@@ -279,8 +279,8 @@ void SCCP::sccp(Function *f, Module *module) {
         }
     };
 
-    int i = 0;
-    int j = 0;
+    auto i = 0U;
+    auto j = 0U;
     while (i < cfg_work_list.size() || j < ssa_work_list.size()) {
         while (i < cfg_work_list.size()) {
             auto [pre_bb, bb] = cfg_work_list[i++];

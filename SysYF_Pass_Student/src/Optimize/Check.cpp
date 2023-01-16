@@ -180,7 +180,7 @@ void Check::checkPhiInstruction(Instruction *inst) {
         Verify(val->get_type()->get_type_id() == inst->get_type()->get_type_id(),
                "PHI node operands are not the same type as the result!", inst, bb, fun);
     }
-};
+}
 
 void Check::checkInstruction(Instruction *inst) {
     // Check instruction embedded in a basic block
@@ -256,7 +256,7 @@ void Check::checkCallInstruction(Instruction *inst) {
            bb, fun);
 
     // Check the consistency of parameter types.
-    for (int i = 1; i < inst->get_num_operand(); i++) {
+    for (auto i = 1U; i < inst->get_num_operand(); i++) {
         Verify(inst->get_operand(i)->get_type()->get_type_id() == funcTy->get_param_type(i - 1)->get_type_id(),
                "Parameter type conflict!", inst, bb, fun);
     }

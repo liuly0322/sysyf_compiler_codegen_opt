@@ -80,7 +80,6 @@ void Mem2Reg::insideBlockForwarding() {
             //  出现的所有load的左值，进而达到删除load指令的目的
             else if (inst->get_instr_type() == Instruction::OpID::load) {
                 Value* lvalue = static_cast<LoadInst*>(inst)->get_lval();
-                Value* rvalue = dynamic_cast<Value*>(inst);
                 // 如果没有对此左值的定值指令，则跳过
                 if (defined_list.find(lvalue) == defined_list.end()) continue;
                 // 有对左值的定值，找到当前值，并插入forward_list中
@@ -156,7 +155,7 @@ void Mem2Reg::genPhi() {
         auto define_bbs = defined_in_block.find(var)->second;
         std::vector<BasicBlock*> queue;
         queue.assign(define_bbs.begin(), define_bbs.end());
-        int iter_pointer = 0;
+        auto iter_pointer = 0U;
         for (; iter_pointer < queue.size(); iter_pointer++) {
             // 对每个基本块迭代
             for (auto bb_domfront : queue[iter_pointer]->get_dom_frontier()) {

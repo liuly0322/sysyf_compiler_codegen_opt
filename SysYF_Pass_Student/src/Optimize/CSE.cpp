@@ -81,7 +81,7 @@ void CSE::localCSE(Function *fun) {
             for (auto *inst : bb->get_instructions()) {
                 insts.push_back(inst);
             }
-            for (auto i = 0; i < insts.size(); ++i) {
+            for (auto i = 0U; i < insts.size(); ++i) {
                 auto *inst = insts[i];
                 if (!isOptmized(inst)) {
                     continue;
@@ -106,7 +106,7 @@ void CSE::globalCSE(Function *fun) {
     replaceSubExpr(fun);
 }
 
-bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts, int index) {
+bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts, unsigned index) {
     for (auto i = index + 1; i < insts.size(); ++i) {
         auto instr = insts[i];
         if (cmp(inst, instr)) {
@@ -140,7 +140,7 @@ void CSE::calcGenKill(Function *fun) {
         for (auto *inst : bb->get_instructions()) {
             insts.push_back(inst);
         }
-        for (auto i = 0; i < insts.size(); ++i) {
+        for (auto i = 0U; i < insts.size(); ++i) {
             auto *inst = insts[i];
             if (!isOptmized(inst)) {
                 continue;
@@ -165,7 +165,7 @@ void CSE::calcGenKill(Function *fun) {
                 continue;
             }
             Value *target = inst;
-            for (auto i = 0; i < available.size(); ++i) {
+            for (auto i = 0U; i < available.size(); ++i) {
                 if (available[i].inst->is_load()) {
                     if (cmp(available[i].inst, inst)) {
                         kill[i] = true;
@@ -199,7 +199,7 @@ void CSE::calcInOut(Function *fun) {
             if (bb != fun->get_entry_block()) {
                 std::vector<bool> in(U);
                 for (auto *pre : bb->get_pre_basic_blocks()) {
-                    for (auto i = 0; i < available.size(); i++) {
+                    for (auto i = 0U; i < available.size(); i++) {
                         in[i] = in[i] && OUT[pre][i];
                     }
                 }
@@ -208,7 +208,7 @@ void CSE::calcInOut(Function *fun) {
 
             // calculate OUT
             std::vector<bool> preOut = OUT[bb];
-            for (auto i = 0; i < available.size(); ++i) {
+            for (auto i = 0U; i < available.size(); ++i) {
                 OUT[bb][i] = GEN[bb][i] || (IN[bb][i] && !KILL[bb][i]);
             }
             if (preOut != OUT[bb]) {
@@ -224,7 +224,7 @@ void CSE::findSource(Function *fun) {
         for (auto *inst : bb->get_instructions()) {
             insts.push_back(inst);
         }
-        for (auto i = 0; i < insts.size(); ++i) {
+        for (auto i = 0U; i < insts.size(); ++i) {
             auto *inst = insts[i];
             if (!isOptmized(inst)) {
                 continue;
@@ -275,7 +275,7 @@ BasicBlock *CSE::isReach(BasicBlock *bb, Instruction *inst) {
     auto *curbb = inst->get_parent();
     std::set<BasicBlock *> visited;
     return traverse(curbb, bb, curbb, visited, false);
-};
+}
 
 void CSE::replaceSubExpr(Function *fun) {
     for (auto *bb : fun->get_basic_blocks()) {
