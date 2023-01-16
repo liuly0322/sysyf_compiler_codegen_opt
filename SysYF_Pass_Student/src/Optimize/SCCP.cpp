@@ -22,12 +22,6 @@ static inline float get_const_float(Value *constant) {
     return static_cast<ConstantFloat *>(constant)->get_value();
 }
 
-const std::unordered_set<std::string> binary_ops{"add",  "sub",  "mul",  "sdiv",
-                                                 "srem", "fadd", "fsub", "fmul",
-                                                 "fdiv", "cmp",  "fcmp"};
-
-const std::unordered_set<std::string> unary_ops{"fptosi", "sitofp", "zext"};
-
 struct ValueStatus {
     enum Status { BOT = 0, CONST, TOP };
     Status status;
@@ -41,15 +35,15 @@ struct ValueStatus {
             value = b.value;
         } else if (status == b.status && status == CONST) {
             if (dynamic_cast<ConstantInt *>(value) != nullptr) {
-                auto x = static_cast<ConstantInt *>(value)->get_value();
-                auto y = static_cast<ConstantInt *>(b.value)->get_value();
+                auto x = get_const_int(value);
+                auto y = get_const_int(b.value);
                 if (x != y) {
                     status = BOT;
                     value = nullptr;
                 }
             } else {
-                auto x = static_cast<ConstantFloat *>(value)->get_value();
-                auto y = static_cast<ConstantFloat *>(b.value)->get_value();
+                auto x = get_const_float(value);
+                auto y = get_const_float(b.value);
                 if (x != y) {
                     status = BOT;
                     value = nullptr;
@@ -63,15 +57,28 @@ struct ValueStatus {
         if (status != CONST)
             return false;
         if (dynamic_cast<ConstantInt *>(value) != nullptr) {
-            auto x = static_cast<ConstantInt *>(value)->get_value();
-            auto y = static_cast<ConstantInt *>(b.value)->get_value();
+            auto x = get_const_int(value);
+            auto y = get_const_int(b.value);
             return x != y;
         }
-        auto x = static_cast<ConstantFloat *>(value)->get_value();
-        auto y = static_cast<ConstantFloat *>(b.value)->get_value();
+        auto x = get_const_float(value);
+        auto y = get_const_float(b.value);
         return x != y;
     }
 };
+
+ValueStatus get_mapped(std::unordered_map<Value *, ValueStatus> &value_map,
+                       Value *key) {
+    if (auto *constant = dynamic_cast<Constant *>(key))
+        return {ValueStatus::CONST, constant};
+    return value_map[key];
+}
+
+const std::unordered_set<std::string> binary_ops{"add",  "sub",  "mul",  "sdiv",
+                                                 "srem", "fadd", "fsub", "fmul",
+                                                 "fdiv", "cmp",  "fcmp"};
+
+const std::unordered_set<std::string> unary_ops{"fptosi", "sitofp", "zext"};
 
 Constant *const_fold(Instruction *inst, Constant *v1, Constant *v2,
                      Module *module) {
@@ -147,26 +154,6 @@ Constant *const_fold(Instruction *inst, Constant *v, Module *module) {
     }
 }
 
-void branch_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
-                   BasicBlock *invalid_bb) {
-    auto *bb = inst->get_parent();
-    // 指令无条件跳转至 jmp_bb
-    inst->remove_operands(0, 2);
-    inst->add_operand(jmp_bb);
-    // 调整前驱后继关系
-    if (jmp_bb == invalid_bb)
-        return;
-    bb->remove_succ_basic_block(invalid_bb);
-    invalid_bb->remove_pre_basic_block(bb);
-}
-
-ValueStatus get_mapped(std::unordered_map<Value *, ValueStatus> &value_map,
-                       Value *key) {
-    if (auto *constant = dynamic_cast<Constant *>(key))
-        return {ValueStatus::CONST, constant};
-    return value_map[key];
-}
-
 Constant *const_fold(std::unordered_map<Value *, ValueStatus> &value_map,
                      Instruction *inst, Module *module) {
     if (binary_ops.count(inst->get_instr_op_name()) != 0) {
@@ -182,6 +169,19 @@ Constant *const_fold(std::unordered_map<Value *, ValueStatus> &value_map,
         }
     }
     return nullptr;
+}
+
+void branch_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
+                   BasicBlock *invalid_bb) {
+    auto *bb = inst->get_parent();
+    // 指令无条件跳转至 jmp_bb
+    inst->remove_operands(0, 2);
+    inst->add_operand(jmp_bb);
+    // 调整前驱后继关系
+    if (jmp_bb == invalid_bb)
+        return;
+    bb->remove_succ_basic_block(invalid_bb);
+    invalid_bb->remove_pre_basic_block(bb);
 }
 
 void SCCP::execute() {
