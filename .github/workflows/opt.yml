@@ -1,4 +1,4 @@
-ame: auto opt test
+name: auto opt test
 
 on:
   push:
