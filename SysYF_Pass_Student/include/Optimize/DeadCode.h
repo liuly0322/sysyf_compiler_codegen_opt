@@ -12,7 +12,7 @@ class DeadCode : public Pass {
     void execute() final;
     static bool is_critical_inst(Instruction *inst);
     void mark(Function *f);
-    bool sweep(Function *f);
+    void sweep(Function *f);
     static bool clean(Function *f);
     const std::string get_name() const override { return name; }
 

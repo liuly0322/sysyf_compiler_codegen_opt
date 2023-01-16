@@ -58,13 +58,10 @@ bool DeadCode::is_critical_inst(Instruction *inst) {
 void DeadCode::execute() {
     PureFunction::markPure(module);
     for (auto *f : module->get_functions()) {
-        bool changed{};
         do {
-            changed = false;
             mark(f);
-            changed |= sweep(f);
-            changed |= clean(f);
-        } while (changed);
+            sweep(f);
+        } while (clean(f));
     }
 }
 
@@ -133,7 +130,7 @@ void DeadCode::mark(Function *f) {
     this->marked = std::move(marked);
 }
 
-bool DeadCode::sweep(Function *f) {
+void DeadCode::sweep(Function *f) {
     std::vector<Instruction *> delete_list{};
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *op : bb->get_instructions()) {
@@ -183,7 +180,6 @@ bool DeadCode::sweep(Function *f) {
     }
     for (auto *inst : delete_list)
         inst->get_parent()->delete_instr(inst);
-    return !delete_list.empty();
 }
 
 bool DeadCode::clean(Function *f) {
