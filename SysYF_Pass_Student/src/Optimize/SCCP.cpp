@@ -32,6 +32,9 @@ struct ValueStatus {
     enum Status { BOT = 0, CONST, TOP };
     Status status;
     Constant *value;
+    [[nodiscard]] bool is_bot() const { return status == BOT; }
+    [[nodiscard]] bool is_const() const { return status == CONST; }
+    [[nodiscard]] bool is_top() const { return status == TOP; }
     void operator^=(ValueStatus &b) {
         if (b.status < status) {
             status = b.status;
@@ -153,26 +156,7 @@ void branch_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
     inst->remove_operands(0, 2);
     inst->add_operand(jmp_bb);
     // invalid_bb 如果开头有当前 bb 来的 phi，则进行精简
-    auto delete_list = std::vector<Instruction *>{};
-    for (auto *inst : invalid_bb->get_instructions()) {
-        if (!inst->is_phi())
-            break;
-        for (auto i = 1; i < inst->get_operands().size();) {
-            auto *op = inst->get_operand(i);
-            if (op == bb) {
-                inst->remove_operands(i - 1, i);
-            } else {
-                i += 2;
-            }
-        }
-        if (inst->get_num_operand() == 2) {
-            inst->replace_all_use_with(inst->get_operand(0));
-            delete_list.push_back(inst);
-        }
-    }
-    for (auto *inst : delete_list) {
-        invalid_bb->delete_instr(inst);
-    }
+    invalid_bb->remove_phi_from(bb);
 }
 
 ValueStatus get_mapped(std::unordered_map<Value *, ValueStatus> &value_map,
@@ -226,7 +210,7 @@ void SCCP::sccp(Function *f, Module *module) {
     // 初始化
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *expr : bb->get_instructions()) {
-            value_map.insert({expr, ValueStatus{ValueStatus::TOP}});
+            value_map.insert({expr, {ValueStatus::TOP}});
         }
     }
 
@@ -258,6 +242,8 @@ void SCCP::sccp(Function *f, Module *module) {
 
     auto visit_inst = [&](Instruction *inst) {
         auto *bb = inst->get_parent();
+        auto prev_status = value_map[inst];
+        auto cur_status = prev_status;
         if (inst->is_br()) {
             // 取决于 operand[0] 定值
             if (static_cast<BranchInst *>(inst)->is_cond_br()) {
@@ -284,41 +270,26 @@ void SCCP::sccp(Function *f, Module *module) {
             }
         } else if (binary_ops.count(inst->get_instr_op_name()) != 0 ||
                    unary_ops.count(inst->get_instr_op_name()) != 0) {
-            auto prev_status = value_map[inst];
-            auto cur_status = prev_status;
             auto *folded = const_fold(value_map, inst, module);
             if (folded != nullptr) {
-                cur_status = ValueStatus{ValueStatus::CONST, folded};
+                cur_status = {ValueStatus::CONST, folded};
             } else {
                 // 否则是 top 或 bot，取决于 operands 是否出现 bot
-                cur_status = ValueStatus{ValueStatus::TOP};
+                cur_status = {ValueStatus::TOP};
                 for (auto *op : inst->get_operands()) {
-                    auto *op_global = dynamic_cast<GlobalVariable *>(op);
-                    auto *op_arg = dynamic_cast<Argument *>(op);
-                    auto *op_inst = dynamic_cast<Instruction *>(op);
-                    if (op_global != nullptr || op_arg != nullptr ||
-                        (op_inst != nullptr &&
-                         value_map[op_inst].status == ValueStatus::BOT)) {
-                        cur_status = ValueStatus{ValueStatus::BOT};
+                    if (value_map[op].is_bot()) {
+                        cur_status = {ValueStatus::BOT};
                     }
                 }
             }
-            if (cur_status != prev_status) {
-                value_map[inst] = cur_status;
-                for (auto use : inst->get_use_list()) {
-                    auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-                    ssa_work_list.push_back(use_inst);
-                }
-            }
         } else {
-            auto prev_status = value_map[inst];
-            auto cur_status = ValueStatus{ValueStatus::BOT};
-            if (cur_status != prev_status) {
-                value_map[inst] = cur_status;
-                for (auto use : inst->get_use_list()) {
-                    auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-                    ssa_work_list.push_back(use_inst);
-                }
+            cur_status = {ValueStatus::BOT};
+        }
+        if (cur_status != prev_status) {
+            value_map[inst] = cur_status;
+            for (auto use : inst->get_use_list()) {
+                auto *use_inst = dynamic_cast<Instruction *>(use.val_);
+                ssa_work_list.push_back(use_inst);
             }
         }
     };
@@ -342,9 +313,17 @@ void SCCP::sccp(Function *f, Module *module) {
         }
         while (j < ssa_work_list.size()) {
             auto *inst = ssa_work_list[j++];
+            auto *bb = inst->get_parent();
 
-            // 如果指令已经是 bot 了，不需要再传播
-            if (get_mapped(value_map, inst).status == ValueStatus::BOT)
+            // 如果指令不可达，不需要更新状态
+            bool arrived = false;
+            for (auto *pre_bb : bb->get_pre_basic_blocks()) {
+                if (marked.count({pre_bb, bb}) != 0) {
+                    arrived = true;
+                    break;
+                }
+            }
+            if (!arrived)
                 continue;
 
             if (inst->is_phi())

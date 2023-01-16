@@ -192,183 +192,169 @@ void DeadCode::clean(Function *f) {
         return;
 
     bool changed{};
-    std::vector<BasicBlock *> work_list;
 
-    std::unordered_set<BasicBlock *> visited;
-    std::function<void(BasicBlock *)> post_traverse;
-    post_traverse = [&](BasicBlock *i) {
-        // 后序遍历
-        if (visited.count(i) != 0)
+    auto visit = [&](BasicBlock *i) {
+        // 先确保存在 br 语句
+        auto *terminator = i->get_terminator();
+        if (!terminator->is_br())
             return;
-        visited.insert(i);
-        for (auto *bb : i->get_succ_basic_blocks()) {
-            post_traverse(bb);
+        auto *br_inst = static_cast<BranchInst *>(terminator);
+        if (br_inst->is_cond_br()) {
+            // 先尝试替换为 jmp
+            if (br_inst->get_operand(1) != br_inst->get_operand(2)) {
+                return;
+            }
+            // 相同的跳转目的地
+            auto *target = br_inst->get_operand(1);
+            br_inst->remove_operands(0, 2);
+            br_inst->add_operand(target);
         }
-        work_list.push_back(i);
+
+        // 下面是对 i jmp 到 j 的优化
+        auto *j = i->get_succ_basic_blocks().front();
+        if (i->get_num_of_instr() == 1) {
+            // i 是空的，到 i 的跳转直接改为到 j 的跳转
+
+            // 会删除 i, 所以保证 i 不是入口基本块
+            if (i == f->get_entry_block())
+                return;
+
+            // 这里要求 j 不能有同时含有 i 和 i 前驱作为操作数的 phi 指令
+            const std::unordered_set<Value *> pres{
+                i->get_pre_basic_blocks().begin(),
+                i->get_pre_basic_blocks().end()};
+            bool has_both_pre_and_i = false;
+
+            for (auto *j_inst : j->get_instructions()) {
+                auto *phi_inst = dynamic_cast<PhiInst *>(j_inst);
+                if (phi_inst == nullptr)
+                    break;
+
+                auto has_pre = false;
+                auto has_i = false;
+                for (auto *phi_operand : phi_inst->get_operands()) {
+                    if (pres.count(phi_operand) != 0)
+                        has_pre = true;
+                    if (phi_operand == i)
+                        has_i = true;
+                }
+
+                if (has_pre && has_i) {
+                    has_both_pre_and_i = true;
+                    break;
+                }
+            }
+            if (has_both_pre_and_i)
+                return;
+
+            changed = true;
+            delete_basic_block(i, j);
+        } else if (j->get_pre_basic_blocks().size() == 1) {
+            // j 只有 i 一个前驱，合并这两个基本块
+
+            // 会删除 i, 所以保证 i 不是入口基本块
+            if (i == f->get_entry_block())
+                return;
+
+            changed = true;
+            // 相当于把 i 「删除」，原有指令移到 j
+            // 这里 j 可能有无用的 phi 指令，删除即可
+            while (j->get_instructions().front()->is_phi()) {
+                auto *phi_inst = j->get_instructions().front();
+                phi_inst->replace_all_use_with(phi_inst->get_operand(0));
+                j->delete_instr(phi_inst);
+            }
+            auto &i_insts = i->get_instructions();
+            for (auto it = ++i_insts.rbegin(); it != i_insts.rend(); ++it) {
+                j->add_instr_begin(*it);
+                (*it)->set_parent(j);
+            }
+            delete_basic_block(i, j);
+        } else if (j->get_num_of_instr() == 1) {
+            // j 是空基本块
+            // 如果 j 末尾是分支，则可以提升分支
+            auto *j_terminator = j->get_terminator();
+            auto *j_br = dynamic_cast<BranchInst *>(j_terminator);
+            if (j_br == nullptr)
+                return;
+            if (!j_br->is_cond_br())
+                return;
+
+            changed = true;
+            auto *cond = j_br->get_operand(0);
+            auto *true_bb = static_cast<BasicBlock *>(j_br->get_operand(1));
+            auto *false_bb = static_cast<BasicBlock *>(j_br->get_operand(2));
+            terminator->remove_operands(0, 0);
+            terminator->add_operand(cond);
+            terminator->add_operand(true_bb);
+            terminator->add_operand(false_bb);
+            i->remove_succ_basic_block(j);
+            j->remove_pre_basic_block(i);
+
+            auto connect = [&](BasicBlock *dst) {
+                i->add_succ_basic_block(dst);
+                dst->add_pre_basic_block(i);
+
+                // 如果有 j 的 phi operand，给 i 也来一份
+                for (auto *inst : dst->get_instructions()) {
+                    if (!inst->is_phi())
+                        break;
+                    for (auto index = 1; index < inst->get_num_operand();
+                         index += 2) {
+                        if (inst->get_operand(index) == j) {
+                            inst->add_operand(inst->get_operand(index - 1));
+                            inst->add_operand(i);
+                            break;
+                        }
+                    }
+                }
+            };
+            connect(true_bb);
+            connect(false_bb);
+        }
+    };
+
+    auto visited = std::unordered_set<BasicBlock *>{};
+    auto post_traverse = [&]() {
+        auto work_list = std::vector<BasicBlock *>{};
+        std::function<void(BasicBlock *)> post_traverse_recur;
+        post_traverse_recur = [&](BasicBlock *i) {
+            if (visited.count(i) != 0)
+                return;
+            visited.insert(i);
+            for (auto *bb : i->get_succ_basic_blocks()) {
+                post_traverse_recur(bb);
+            }
+            work_list.push_back(i);
+        };
+        post_traverse_recur(f->get_entry_block());
+        for (auto *bb : work_list) {
+            visit(bb);
+        }
     };
 
     do {
         changed = false;
-        work_list.clear();
         visited.clear();
-        post_traverse(f->get_entry_block());
-        for (auto *i : work_list) {
-            // 先确保存在 br 语句
-            auto *terminator = i->get_terminator();
-            if (!terminator->is_br())
-                continue;
-            auto *br_inst = static_cast<BranchInst *>(terminator);
-            if (br_inst->is_cond_br()) {
-                // 先尝试替换为 jmp
-                if (br_inst->get_operand(1) != br_inst->get_operand(2)) {
-                    continue;
-                }
-                // 相同的跳转目的地
-                auto *target = br_inst->get_operand(1);
-                br_inst->remove_operands(0, 2);
-                br_inst->add_operand(target);
-            }
-
-            // 下面是对 i jmp 到 j 的优化
-            auto *j = i->get_succ_basic_blocks().front();
-            if (i->get_num_of_instr() == 1) {
-                // i 是空的，到 i 的跳转直接改为到 j 的跳转
-
-                // 会删除 i, 所以保证 i 不是入口基本块
-                if (i == f->get_entry_block())
-                    continue;
-
-                // 这里要求 j 不能有同时含有 i 和 i 前驱作为操作数的 phi 指令
-                const std::unordered_set<Value *> pres{
-                    i->get_pre_basic_blocks().begin(),
-                    i->get_pre_basic_blocks().end()};
-                bool has_both_pre_and_i = false;
-
-                for (auto *j_inst : j->get_instructions()) {
-                    auto *phi_inst = dynamic_cast<PhiInst *>(j_inst);
-                    if (phi_inst == nullptr)
-                        break;
-
-                    auto has_pre = false;
-                    auto has_i = false;
-                    for (auto *phi_operand : phi_inst->get_operands()) {
-                        if (pres.count(phi_operand) != 0)
-                            has_pre = true;
-                        if (phi_operand == i)
-                            has_i = true;
-                    }
-
-                    if (has_pre && has_i) {
-                        has_both_pre_and_i = true;
-                        break;
-                    }
-                }
-                if (has_both_pre_and_i)
-                    continue;
-
-                changed = true;
-                delete_basic_block(i, j);
-            } else if (j->get_pre_basic_blocks().size() == 1) {
-                // j 只有 i 一个前驱，合并这两个基本块
-
-                // 会删除 i, 所以保证 i 不是入口基本块
-                if (i == f->get_entry_block())
-                    continue;
-
-                changed = true;
-                // 相当于把 i 「删除」，原有指令移到 j
-                // 这里 j 可能有无用的 phi 指令，删除即可
-                while (j->get_instructions().front()->is_phi()) {
-                    auto *phi_inst = j->get_instructions().front();
-                    phi_inst->replace_all_use_with(phi_inst->get_operand(0));
-                    j->delete_instr(phi_inst);
-                }
-                auto &i_insts = i->get_instructions();
-                for (auto it = ++i_insts.rbegin(); it != i_insts.rend(); ++it) {
-                    j->add_instr_begin(*it);
-                    (*it)->set_parent(j);
-                }
-                delete_basic_block(i, j);
-            } else if (j->get_num_of_instr() == 1) {
-                // j 是空基本块
-                // 如果 j 末尾是分支，则可以提升分支
-                auto *j_terminator = j->get_terminator();
-                auto *j_br = dynamic_cast<BranchInst *>(j_terminator);
-                if (j_br == nullptr)
-                    continue;
-                if (!j_br->is_cond_br())
-                    continue;
-
-                changed = true;
-                auto *cond = j_br->get_operand(0);
-                auto *true_bb = static_cast<BasicBlock *>(j_br->get_operand(1));
-                auto *false_bb =
-                    static_cast<BasicBlock *>(j_br->get_operand(2));
-                terminator->remove_operands(0, 0);
-                terminator->add_operand(cond);
-                terminator->add_operand(true_bb);
-                terminator->add_operand(false_bb);
-                i->remove_succ_basic_block(j);
-                j->remove_pre_basic_block(i);
-
-                auto connect = [&](BasicBlock *dst) {
-                    i->add_succ_basic_block(dst);
-                    dst->add_pre_basic_block(i);
-
-                    // 如果有 j 的 phi operand，给 i 也来一份
-                    for (auto *inst : dst->get_instructions()) {
-                        if (!inst->is_phi())
-                            break;
-                        for (auto index = 1; index < inst->get_num_operand();
-                             index += 2) {
-                            if (inst->get_operand(index) == j) {
-                                inst->add_operand(inst->get_operand(index - 1));
-                                inst->add_operand(i);
-                                break;
-                            }
-                        }
-                    }
-                };
-                connect(true_bb);
-                connect(false_bb);
-            }
-        }
+        post_traverse();
     } while (changed);
 
     auto delete_list = std::vector<BasicBlock *>{};
-    do {
-        delete_list.clear();
-        for (auto it = ++f->get_basic_blocks().begin();
-             it != f->get_basic_blocks().end(); ++it) {
-            auto *bb = *it;
-            if (bb->get_pre_basic_blocks().empty()) {
-                // 删除 bb 后继与它的前驱后继关系
-                for (auto *succ : bb->get_succ_basic_blocks()) {
-                    succ->remove_pre_basic_block(bb);
-                    // succ 开头如果有用到 bb 的 phi 指令，也需要删除
-                    auto delete_phi = std::vector<Instruction *>{};
-                    for (auto *inst : succ->get_instructions()) {
-                        if (!inst->is_phi())
-                            break;
-                        for (auto i = 1; i < inst->get_operands().size();) {
-                            auto *op = inst->get_operand(i);
-                            if (op == bb) {
-                                inst->remove_operands(i - 1, i);
-                            } else {
-                                i += 2;
-                            }
-                        }
-                    }
-                    for (auto *inst : delete_phi) {
-                        succ->delete_instr(inst);
-                    }
-                }
-                bb->get_succ_basic_blocks().clear();
-                delete_list.push_back(bb);
-            }
+    for (auto *bb : f->get_basic_blocks()) {
+        if (visited.count(bb) != 0)
+            continue;
+        // 不可达
+        delete_list.push_back(bb);
+        // 删除 bb 后继与它的前驱后继关系
+        for (auto *succ : bb->get_succ_basic_blocks()) {
+            succ->remove_pre_basic_block(bb);
+            // succ 开头如果有用到 bb 的 phi 指令，也需要删除
+            succ->remove_phi_from(bb);
         }
-        for (auto *bb : delete_list) {
-            f->remove(bb);
-        }
-    } while (!delete_list.empty());
+        bb->get_succ_basic_blocks().clear();
+    }
+
+    for (auto *bb : delete_list) {
+        f->remove(bb);
+    }
 }

@@ -27,6 +27,29 @@ void BasicBlock::add_instruction(Instruction *instr)
     instr_list_.push_back(instr);
 }
 
+void BasicBlock::remove_phi_from(BasicBlock *bb) {
+    auto delete_phi = std::vector<Instruction *>{};
+    for (auto *inst : instr_list_) {
+        if (!inst->is_phi())
+            break;
+        for (auto i = 1; i < inst->get_operands().size();) {
+            auto *op = inst->get_operand(i);
+            if (op == bb) {
+                inst->remove_operands(i - 1, i);
+            } else {
+                i += 2;
+            }
+        }
+        if (inst->get_num_operand() == 2) {
+            inst->replace_all_use_with(inst->get_operand(0));
+            delete_phi.push_back(inst);
+        }
+    }
+    for (auto *inst : delete_phi) {
+        delete_instr(inst);
+    }
+}
+
 void BasicBlock::add_instruction(std::list<Instruction *>::iterator instr_pos, Instruction *instr)
 {
     instr_list_.insert(instr_pos, instr);

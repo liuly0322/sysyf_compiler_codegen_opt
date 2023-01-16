@@ -38,6 +38,8 @@ public:
     void remove_pre_basic_block(BasicBlock* bb) { pre_bbs_.remove(bb); }
     void remove_succ_basic_block(BasicBlock* bb) { succ_bbs_.remove(bb); }
 
+    void remove_phi_from(BasicBlock* bb);
+
     /****************api about cfg****************/
 
     /// Returns the terminator instruction if the block is well formed or null
