@@ -32,10 +32,10 @@ public:
 
     std::list<BasicBlock*>& get_pre_basic_blocks() { return pre_bbs_; }
     std::list<BasicBlock*>& get_succ_basic_blocks() { return succ_bbs_; }
-    void add_pre_basic_block(BasicBlock* bb) { pre_bbs_.push_back(bb); }
-    void add_succ_basic_block(BasicBlock* bb) { succ_bbs_.push_back(bb); }
+    void add_pre_basic_block(BasicBlock* bb) { pre_bbs_.remove(bb); pre_bbs_.push_back(bb); }
+    void add_succ_basic_block(BasicBlock* bb) { succ_bbs_.remove(bb); succ_bbs_.push_back(bb); }
 
-    void remove_pre_basic_block(BasicBlock* bb) { pre_bbs_.remove(bb); }
+    void remove_pre_basic_block(BasicBlock* bb) { remove_phi_from(bb); pre_bbs_.remove(bb); }
     void remove_succ_basic_block(BasicBlock* bb) { succ_bbs_.remove(bb); }
 
     void remove_phi_from(BasicBlock* bb);

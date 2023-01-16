@@ -149,14 +149,15 @@ Constant *const_fold(Instruction *inst, Constant *v, Module *module) {
 
 void branch_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
                    BasicBlock *invalid_bb) {
-    // 无条件跳转至 jmp_bb
     auto *bb = inst->get_parent();
-    bb->remove_succ_basic_block(invalid_bb);
-    invalid_bb->remove_pre_basic_block(bb);
+    // 指令无条件跳转至 jmp_bb
     inst->remove_operands(0, 2);
     inst->add_operand(jmp_bb);
-    // invalid_bb 如果开头有当前 bb 来的 phi，则进行精简
-    invalid_bb->remove_phi_from(bb);
+    // 调整前驱后继关系
+    if (jmp_bb == invalid_bb)
+        return;
+    bb->remove_succ_basic_block(invalid_bb);
+    invalid_bb->remove_pre_basic_block(bb);
 }
 
 ValueStatus get_mapped(std::unordered_map<Value *, ValueStatus> &value_map,
@@ -185,12 +186,10 @@ Constant *const_fold(std::unordered_map<Value *, ValueStatus> &value_map,
 
 void SCCP::execute() {
     // 遍历每个函数
-    // std::cout << module->print();
     for (auto *f : module->get_functions()) {
         if (!f->is_declaration())
             sccp(f, module);
     }
-    // std::cout << module->print();
 }
 
 struct hashFunction {
@@ -214,39 +213,25 @@ void SCCP::sccp(Function *f, Module *module) {
         }
     }
 
-    auto visit_phi = [&](Instruction *inst) {
-        auto prev_status = value_map[inst];
-        auto cur_status = prev_status;
-        auto *phi_inst = dynamic_cast<PhiInst *>(inst);
-        auto *bb = phi_inst->get_parent();
-
-        const int phi_size = phi_inst->get_num_operand() / 2;
-        for (int i = 0; i < phi_size; i++) {
-            auto *pre_bb =
-                static_cast<BasicBlock *>(phi_inst->get_operand(2 * i + 1));
-            if (marked.count({pre_bb, bb}) != 0) {
-                auto *op = phi_inst->get_operand(2 * i);
-                auto op_status = get_mapped(value_map, op);
-                cur_status ^= op_status;
-            }
-        }
-
-        if (cur_status != prev_status) {
-            value_map[inst] = cur_status;
-            for (auto use : inst->get_use_list()) {
-                auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-                ssa_work_list.push_back(use_inst);
-            }
-        }
-    };
-
     auto visit_inst = [&](Instruction *inst) {
         auto *bb = inst->get_parent();
         auto prev_status = value_map[inst];
         auto cur_status = prev_status;
-        if (inst->is_br()) {
-            // 取决于 operand[0] 定值
+        if (inst->is_phi()) {
+            const int phi_size = inst->get_num_operand() / 2;
+            for (int i = 0; i < phi_size; i++) {
+                auto *pre_bb =
+                    static_cast<BasicBlock *>(inst->get_operand(2 * i + 1));
+                if (marked.count({pre_bb, bb}) != 0) {
+                    auto *op = inst->get_operand(2 * i);
+                    auto op_status = get_mapped(value_map, op);
+                    cur_status ^= op_status;
+                }
+            }
+        } else if (inst->is_br()) {
+            // 分支或跳转
             if (static_cast<BranchInst *>(inst)->is_cond_br()) {
+                // 取决于 operand[0] 是否为 Constant*
                 auto *const_cond = static_cast<ConstantInt *>(
                     get_mapped(value_map, inst->get_operand(0)).value);
                 auto *true_bb = static_cast<BasicBlock *>(inst->get_operand(1));
@@ -304,32 +289,20 @@ void SCCP::sccp(Function *f, Module *module) {
                 continue;
             marked.insert({pre_bb, bb});
 
-            for (auto *inst : bb->get_instructions()) {
-                if (inst->is_phi())
-                    visit_phi(inst);
-                else
-                    visit_inst(inst);
-            }
+            for (auto *inst : bb->get_instructions())
+                visit_inst(inst);
         }
         while (j < ssa_work_list.size()) {
             auto *inst = ssa_work_list[j++];
             auto *bb = inst->get_parent();
 
-            // 如果指令不可达，不需要更新状态
-            bool arrived = false;
+            // 仅当指令可达才更新状态
             for (auto *pre_bb : bb->get_pre_basic_blocks()) {
                 if (marked.count({pre_bb, bb}) != 0) {
-                    arrived = true;
+                    visit_inst(inst);
                     break;
                 }
             }
-            if (!arrived)
-                continue;
-
-            if (inst->is_phi())
-                visit_phi(inst);
-            else
-                visit_inst(inst);
         }
     }
 

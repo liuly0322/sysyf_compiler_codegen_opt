@@ -8,7 +8,7 @@ cd ../../
 mkdir -p build
 cd build
 cmake ../
-make
+make -j
 
 ## 2. execute and collect result
 cd ../test

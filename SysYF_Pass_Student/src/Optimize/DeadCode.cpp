@@ -348,8 +348,6 @@ void DeadCode::clean(Function *f) {
         // 删除 bb 后继与它的前驱后继关系
         for (auto *succ : bb->get_succ_basic_blocks()) {
             succ->remove_pre_basic_block(bb);
-            // succ 开头如果有用到 bb 的 phi 指令，也需要删除
-            succ->remove_phi_from(bb);
         }
         bb->get_succ_basic_blocks().clear();
     }
