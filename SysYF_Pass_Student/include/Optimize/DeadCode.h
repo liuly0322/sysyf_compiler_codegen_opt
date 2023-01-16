@@ -11,14 +11,14 @@ class DeadCode : public Pass {
     DeadCode(Module *module) : Pass(module) {}
     void execute() final;
     static bool is_critical_inst(Instruction *inst);
-    static std::unordered_set<Instruction *> mark(Function *f);
-    static void sweep(Function *f,
-                      const std::unordered_set<Instruction *> &marked);
-    static void clean(Function *f);
+    void mark(Function *f);
+    bool sweep(Function *f);
+    static bool clean(Function *f);
     const std::string get_name() const override { return name; }
 
   private:
     const std::string name = "DeadCode";
+    std::unordered_set<Instruction *> marked;
 };
 
 #endif // SYSYF_DEADCODE_H

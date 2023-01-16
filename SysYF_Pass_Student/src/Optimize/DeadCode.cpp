@@ -56,20 +56,19 @@ bool DeadCode::is_critical_inst(Instruction *inst) {
 }
 
 void DeadCode::execute() {
-    // 标记纯函数
     PureFunction::markPure(module);
-    // 逐个函数处理
     for (auto *f : module->get_functions()) {
-        // 标记重要变量
-        auto marked = mark(f);
-        // 清理空指令
-        sweep(f, marked);
-        // 清理控制流
-        clean(f);
+        bool changed{};
+        do {
+            changed = false;
+            mark(f);
+            changed |= sweep(f);
+            changed |= clean(f);
+        } while (changed);
     }
 }
 
-std::unordered_set<Instruction *> DeadCode::mark(Function *f) {
+void DeadCode::mark(Function *f) {
     std::unordered_set<Instruction *> marked{};
     std::vector<Instruction *> work_list{};
 
@@ -131,11 +130,10 @@ std::unordered_set<Instruction *> DeadCode::mark(Function *f) {
         }
     }
 
-    return marked;
+    this->marked = std::move(marked);
 }
 
-void DeadCode::sweep(Function *f,
-                     const std::unordered_set<Instruction *> &marked) {
+bool DeadCode::sweep(Function *f) {
     std::vector<Instruction *> delete_list{};
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *op : bb->get_instructions()) {
@@ -185,13 +183,15 @@ void DeadCode::sweep(Function *f,
     }
     for (auto *inst : delete_list)
         inst->get_parent()->delete_instr(inst);
+    return !delete_list.empty();
 }
 
-void DeadCode::clean(Function *f) {
+bool DeadCode::clean(Function *f) {
     if (f->is_declaration())
-        return;
+        return false;
 
     bool changed{};
+    bool ever_changed{};
 
     auto visit = [&](BasicBlock *i) {
         // 先确保存在 br 语句
@@ -247,7 +247,7 @@ void DeadCode::clean(Function *f) {
             if (has_both_pre_and_i)
                 return;
 
-            changed = true;
+            changed = true, ever_changed = true;
             delete_basic_block(i, j);
         } else if (j->get_pre_basic_blocks().size() == 1) {
             // j 只有 i 一个前驱，合并这两个基本块
@@ -256,7 +256,7 @@ void DeadCode::clean(Function *f) {
             if (i == f->get_entry_block())
                 return;
 
-            changed = true;
+            changed = true, ever_changed = true;
             // 相当于把 i 「删除」，原有指令移到 j
             // 这里 j 可能有无用的 phi 指令，删除即可
             while (j->get_instructions().front()->is_phi()) {
@@ -280,7 +280,7 @@ void DeadCode::clean(Function *f) {
             if (!j_br->is_cond_br())
                 return;
 
-            changed = true;
+            changed = true, ever_changed = true;
             auto *cond = j_br->get_operand(0);
             auto *true_bb = static_cast<BasicBlock *>(j_br->get_operand(1));
             auto *false_bb = static_cast<BasicBlock *>(j_br->get_operand(2));
@@ -355,4 +355,6 @@ void DeadCode::clean(Function *f) {
     for (auto *bb : delete_list) {
         f->remove(bb);
     }
+
+    return ever_changed || !delete_list.empty();
 }
