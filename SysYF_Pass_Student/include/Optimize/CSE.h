@@ -106,14 +106,11 @@ class CSE : public Pass {
     BasicBlock *isReach(BasicBlock *bb, Instruction *inst);
 
     const std::string get_name() const override { return name; }
-    bool isOptmized(Instruction *inst) {
+    static bool isOptmized(Instruction *inst) {
         if (inst->is_void() || inst->is_alloca()) {
             return false;
         }
         if (inst->is_call() && !PureFunction::is_pure[dynamic_cast<Function *>(inst->get_operand(0))]) {
-            return false;
-        }
-        if (inst->is_load() && (dynamic_cast<GlobalVariable *>(inst->get_operand(0)) || dynamic_cast<Argument *>(inst->get_operand(0)))) {
             return false;
         }
         return true;

@@ -28,29 +28,27 @@ Value *CSE::findOrigin(Value *val) {
     while (auto *gep_inst = dynamic_cast<GetElementPtrInst *>(lval_runner)) {
         lval_runner = gep_inst->get_operand(0);
     }
-    // auto *alloca = dynamic_cast<AllocaInst *>(lval_runner);
-    // if (alloca != nullptr) {
-    //     return alloca;
-    // }
-    // auto *global = dynamic_cast<GlobalVariable *>(lval_runner);
-    // if (global != nullptr) {
-    //     return global;
-    // }
-    // GlobalVariable or argument
+    // GlobalVariable or Argument or AllocaInst
     return lval_runner;
 }
 
 bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     // assert inst1 is load
+    if (!inst1->is_load())
+        return false;
+    auto *target = findOrigin(inst1->get_operand(0));
+    // not local variable, not for sure
+    if (dynamic_cast<Argument*>(target) != nullptr ||
+        dynamic_cast<GlobalVariable*>(target) != nullptr)
+        return inst2->is_call() || inst2->is_store();
     // store change load
-    if (inst1->is_load() && inst2->is_store()) {
-        if (findOrigin(inst1->get_operand(0)) == findOrigin(inst2->get_operand(1))) {
+    if (inst2->is_store()) {
+        if (target == findOrigin(inst2->get_operand(1))) {
             return true;
         }
     }
     // call change load
-    if (inst1->is_load() && inst2->is_call()) {
-        auto *target = findOrigin(inst1->get_operand(0));
+    if (inst2->is_call()) {
         for (auto *opr : inst2->get_operands()) {
             if (findOrigin(opr) == target) {
                 return true;
