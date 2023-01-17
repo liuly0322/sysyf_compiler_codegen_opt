@@ -8,8 +8,7 @@
 namespace PureFunction {
 
 std::unordered_map<Function *, bool> is_pure;
-std::unordered_map<Function *, std::set<GlobalVariable *>>
-    global_var_store_effects;
+std::unordered_map<Function *, std::set<Value *>> global_var_store_effects;
 
 AllocaInst *store_to_alloca(Instruction *inst) {
     // lval 无法转换为 alloca 指令说明是非局部的，有副作用
@@ -25,6 +24,7 @@ bool markPureInside(Function *f) {
     if (f->is_declaration()) {
         return false;
     }
+    auto pure = true;
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
             // store 指令，且无法找到 alloca 作为左值，说明非局部变量
@@ -32,11 +32,11 @@ bool markPureInside(Function *f) {
                 if (auto *var =
                         dynamic_cast<GlobalVariable *>(inst->get_operand(1)))
                     global_var_store_effects[f].insert(var);
-                return false;
+                pure = false;
             }
         }
     }
-    return true;
+    return pure;
 }
 
 void markPure(Module *module) {

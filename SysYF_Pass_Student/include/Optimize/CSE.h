@@ -71,11 +71,6 @@ class Expression {
             }
             // Other Case: Function / BasicBlock / Instruction
             if (op1 != op2) {
-                // if (inst->is_load()) {
-                // std::cout << inst->print() << " " << expr.inst->print() <<
-                // "\n"; std::cout << op1->get_name() << " " << op2->get_name()
-                // << "\n";
-                // }
                 return false;
             }
         }
@@ -96,12 +91,12 @@ class CSE : public Pass {
   public:
     explicit CSE(Module *m) : Pass(m){};
     void execute() final;
-    bool cmp(Instruction *inst1, Instruction *inst2);
-    Value *findOrigin(Value *val);
-    Instruction *isAppear(Instruction *inst, std::vector<Instruction *> &insts,
-                          int index);
-    bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
-                unsigned index);
+    static bool cmp(Instruction *inst1, Instruction *inst2);
+    static Value *findOrigin(Value *val);
+    static Instruction *isAppear(Instruction *inst,
+                                 std::vector<Instruction *> &insts, int index);
+    static bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
+                       unsigned index);
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
     void calcGenKill(Function *fun);
@@ -109,7 +104,7 @@ class CSE : public Pass {
     void findSource(Function *fun);
     void replaceSubExpr(Function *fun);
     void delete_instr();
-    BasicBlock *isReach(BasicBlock *bb, Instruction *inst);
+    static BasicBlock *isReach(BasicBlock *bb, Instruction *inst);
 
     [[nodiscard]] std::string get_name() const override { return name; }
     static bool isOptmized(Instruction *inst) {

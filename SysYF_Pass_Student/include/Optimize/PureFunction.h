@@ -7,7 +7,7 @@
 
 namespace PureFunction {
 extern std::unordered_map<Function *, bool> is_pure;
-extern std::unordered_map<Function *, std::set<GlobalVariable *>>
+extern std::unordered_map<Function *, std::set<Value *>>
     global_var_store_effects;
 
 /**

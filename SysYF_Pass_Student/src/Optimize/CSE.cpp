@@ -10,8 +10,11 @@
 #include <ostream>
 #include <vector>
 
+using PureFunction::global_var_store_effects;
+using PureFunction::markPure;
+
 void CSE::execute() {
-    PureFunction::markPure(module);
+    markPure(module);
     for (auto *fun : module->get_functions()) {
         if (fun->get_basic_blocks().empty()) {
             continue;
@@ -36,29 +39,30 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     // assert inst1 is load
     if (!inst1->is_load())
         return false;
-    auto *target = findOrigin(inst1->get_operand(0));
-    // not local variable, not for sure
-    if (dynamic_cast<Argument*>(target) != nullptr ||
-        dynamic_cast<GlobalVariable*>(target) != nullptr)
+    auto *lval = inst1->get_operand(0);
+    auto *target = findOrigin(lval);
+    // 1. argument or global array
+    if (dynamic_cast<Argument *>(target) != nullptr ||
+        (dynamic_cast<GlobalVariable *>(target) != nullptr &&
+         dynamic_cast<GlobalVariable *>(lval) == nullptr))
         return inst2->is_call() || inst2->is_store();
-    // store change load
+    // 2. local array or global variable
     if (inst2->is_store()) {
-        if (target == findOrigin(inst2->get_operand(1))) {
-            return true;
-        }
+        return target == findOrigin(inst2->get_operand(1));
     }
-    // call change load
     if (inst2->is_call()) {
-        for (auto *opr : inst2->get_operands()) {
-            if (findOrigin(opr) == target) {
+        auto *callee = static_cast<Function *>(inst2->get_operand(0));
+        if (global_var_store_effects[callee].count(lval) != 0)
+            return true;
+        for (auto *opr : inst2->get_operands())
+            if (findOrigin(opr) == target)
                 return true;
-            }
-        }
     }
     return false;
 }
 
-Instruction *CSE::isAppear(Instruction *inst, std::vector<Instruction *> &insts, int index) {
+Instruction *CSE::isAppear(Instruction *inst, std::vector<Instruction *> &insts,
+                           int index) {
     for (auto i = index - 1; i >= 0; --i) {
         auto *instr = insts[i];
         if (cmp(inst, instr)) {
@@ -104,7 +108,8 @@ void CSE::globalCSE(Function *fun) {
     replaceSubExpr(fun);
 }
 
-bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts, unsigned index) {
+bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts,
+                 unsigned index) {
     for (auto i = index + 1; i < insts.size(); ++i) {
         auto instr = insts[i];
         if (cmp(inst, instr)) {
@@ -117,13 +122,14 @@ bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts, unsigned 
 void CSE::calcGenKill(Function *fun) {
     // Get available expressions
     available.clear();
-    for (auto bb : fun->get_basic_blocks()) {
-        for (auto inst : bb->get_instructions()) {
+    for (auto *bb : fun->get_basic_blocks()) {
+        for (auto *inst : bb->get_instructions()) {
             if (!isOptmized(inst)) {
                 continue;
             }
-            Expression expr(inst);
-            if (std::find(available.begin(), available.end(), expr) != available.end()) {
+            const Expression expr{inst};
+            if (std::find(available.begin(), available.end(), expr) !=
+                available.end()) {
                 continue;
             }
             available.push_back(expr);
@@ -148,7 +154,9 @@ void CSE::calcGenKill(Function *fun) {
                     continue;
                 }
             }
-            auto index = std::find(available.begin(), available.end(), Expression(inst)) - available.begin();
+            auto index = std::find(available.begin(), available.end(),
+                                   Expression(inst)) -
+                         available.begin();
             gen[index] = true;
         }
         GEN.insert({bb, gen});
@@ -170,7 +178,8 @@ void CSE::calcGenKill(Function *fun) {
                     }
                 }
                 auto &operands = available[i].operands;
-                if (std::find(operands.begin(), operands.end(), target) != operands.end()) {
+                if (std::find(operands.begin(), operands.end(), target) !=
+                    operands.end()) {
                     kill[i] = true;
                 }
             }
@@ -181,12 +190,12 @@ void CSE::calcGenKill(Function *fun) {
 
 void CSE::calcInOut(Function *fun) {
     // initialize
-    std::vector<bool> phi(available.size(), false);
-    std::vector<bool> U(available.size(), true);
+    const std::vector<bool> phi(available.size(), false);
+    const std::vector<bool> U(available.size(), true);
     IN.clear();
     OUT.clear();
     IN.insert({fun->get_entry_block(), phi});
-    for (auto bb : fun->get_basic_blocks()) {
+    for (auto *bb : fun->get_basic_blocks()) {
         OUT.insert({bb, U});
     }
     bool changed = true;
@@ -205,7 +214,7 @@ void CSE::calcInOut(Function *fun) {
             }
 
             // calculate OUT
-            std::vector<bool> preOut = OUT[bb];
+            const std::vector<bool> preOut = OUT[bb];
             for (auto i = 0U; i < available.size(); ++i) {
                 OUT[bb][i] = GEN[bb][i] || (IN[bb][i] && !KILL[bb][i]);
             }
@@ -217,7 +226,7 @@ void CSE::calcInOut(Function *fun) {
 }
 
 void CSE::findSource(Function *fun) {
-    for (auto bb : fun->get_basic_blocks()) {
+    for (auto *bb : fun->get_basic_blocks()) {
         std::vector<Instruction *> insts;
         for (auto *inst : bb->get_instructions()) {
             insts.push_back(inst);
@@ -227,7 +236,8 @@ void CSE::findSource(Function *fun) {
             if (!isOptmized(inst)) {
                 continue;
             }
-            auto it = std::find(available.begin(), available.end(), Expression(inst));
+            auto it =
+                std::find(available.begin(), available.end(), Expression(inst));
             auto index = it - available.begin();
             auto &expr = *it;
             if (expr.source.count(inst) && inst->is_load()) {
@@ -248,8 +258,8 @@ void CSE::findSource(Function *fun) {
     }
 }
 
-BasicBlock *
-traverse(BasicBlock *curbb, BasicBlock *dstbb, BasicBlock *prebb, std::set<BasicBlock *> &visited, bool flag) {
+BasicBlock *traverse(BasicBlock *curbb, BasicBlock *dstbb, BasicBlock *prebb,
+                     std::set<BasicBlock *> &visited, bool flag) {
     if (visited.count(curbb)) {
         return nullptr;
     }
@@ -281,14 +291,15 @@ void CSE::replaceSubExpr(Function *fun) {
             if (!isOptmized(inst)) {
                 continue;
             }
-            auto it = std::find(available.begin(), available.end(), Expression(inst));
+            auto it =
+                std::find(available.begin(), available.end(), Expression(inst));
             auto &expr = *it;
             auto index = it - available.begin();
             if (!IN[bb][index] || KILL[bb][index] || expr.source.count(inst)) {
                 continue;
             }
             if (expr.source.size() == 1) {
-                auto repInst = *expr.source.begin();
+                auto *repInst = *expr.source.begin();
                 delete_list.push_back(inst);
                 inst->replace_all_use_with(repInst);
             } else {
@@ -296,7 +307,7 @@ void CSE::replaceSubExpr(Function *fun) {
                 for (auto *instr : expr.source) {
                     auto *srcbb = isReach(bb, instr);
                     if (srcbb != nullptr) {
-                        vec.push_back({instr, srcbb});
+                        vec.emplace_back(instr, srcbb);
                     }
                 }
                 if (vec.size() == 1) {
@@ -305,13 +316,6 @@ void CSE::replaceSubExpr(Function *fun) {
                     inst->replace_all_use_with(repInst);
                     continue;
                 }
-                // delete_list.push_back(inst);
-                // auto *phiInst = PhiInst::create_phi(inst->get_type(), bb);
-                // bb->add_instr_begin(phiInst);
-                // for (auto p : vec) {
-                //     phiInst->add_phi_pair_operand(p.first, p.second);
-                // }
-                // inst->replace_all_use_with(phiInst);
             }
         }
     }
