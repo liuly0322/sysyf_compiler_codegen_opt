@@ -8,13 +8,13 @@
 
 class DeadCode : public Pass {
   public:
-    DeadCode(Module *module) : Pass(module) {}
+    explicit DeadCode(Module *module) : Pass(module) {}
     void execute() final;
     static bool is_critical_inst(Instruction *inst);
     void mark(Function *f);
     void sweep(Function *f);
     static bool clean(Function *f);
-    const std::string get_name() const override { return name; }
+    [[nodiscard]] std::string get_name() const override { return name; }
 
   private:
     const std::string name = "DeadCode";

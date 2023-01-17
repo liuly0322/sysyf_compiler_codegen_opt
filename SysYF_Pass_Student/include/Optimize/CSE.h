@@ -21,7 +21,9 @@ class Expression {
     Instruction::OpID type;
     Instruction *inst;
     std::vector<Value *> &operands;
-    Expression(Instruction *inst) : type(inst->get_instr_type()), inst(inst), operands(inst->get_operands()) {
+    explicit Expression(Instruction *inst)
+        : type(inst->get_instr_type()), inst(inst),
+          operands(inst->get_operands()) {
         source.insert(inst);
     }
     bool operator==(const Expression &expr) const {
@@ -47,7 +49,8 @@ class Expression {
             }
         }
         for (auto i = 0U; i < operands.size(); ++i) {
-            auto *op1 = operands[i], *op2 = expr.operands[i];
+            auto *op1 = operands[i];
+            auto *op2 = expr.operands[i];
             // Int Constant
             auto *iconst1 = dynamic_cast<ConstantInt *>(op1);
             auto *iconst2 = dynamic_cast<ConstantInt *>(op2);
@@ -69,8 +72,9 @@ class Expression {
             // Other Case: Function / BasicBlock / Instruction
             if (op1 != op2) {
                 // if (inst->is_load()) {
-                // std::cout << inst->print() << " " << expr.inst->print() << "\n";
-                // std::cout << op1->get_name() << " " << op2->get_name() << "\n";
+                // std::cout << inst->print() << " " << expr.inst->print() <<
+                // "\n"; std::cout << op1->get_name() << " " << op2->get_name()
+                // << "\n";
                 // }
                 return false;
             }
@@ -90,12 +94,14 @@ class CSE : public Pass {
     const std::string name = "CSE";
 
   public:
-    CSE(Module *m) : Pass(m){};
+    explicit CSE(Module *m) : Pass(m){};
     void execute() final;
     bool cmp(Instruction *inst1, Instruction *inst2);
     Value *findOrigin(Value *val);
-    Instruction *isAppear(Instruction *inst, std::vector<Instruction *> &insts, int index);
-    bool isKill(Instruction *inst, std::vector<Instruction *> &insts, unsigned index);
+    Instruction *isAppear(Instruction *inst, std::vector<Instruction *> &insts,
+                          int index);
+    bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
+                unsigned index);
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
     void calcGenKill(Function *fun);
@@ -105,12 +111,13 @@ class CSE : public Pass {
     void delete_instr();
     BasicBlock *isReach(BasicBlock *bb, Instruction *inst);
 
-    const std::string get_name() const override { return name; }
+    [[nodiscard]] std::string get_name() const override { return name; }
     static bool isOptmized(Instruction *inst) {
         if (inst->is_void() || inst->is_alloca()) {
             return false;
         }
-        if (inst->is_call() && !PureFunction::is_pure[dynamic_cast<Function *>(inst->get_operand(0))]) {
+        if (inst->is_call() && !PureFunction::is_pure[dynamic_cast<Function *>(
+                                   inst->get_operand(0))]) {
             return false;
         }
         return true;

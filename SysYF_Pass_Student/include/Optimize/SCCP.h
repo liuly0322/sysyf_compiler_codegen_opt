@@ -6,10 +6,10 @@
 
 class SCCP : public Pass {
   public:
-    SCCP(Module *module) : Pass(module) {}
+    explicit SCCP(Module *module) : Pass(module) {}
     void execute() final;
     static void sccp(Function *f, Module *module);
-    const std::string get_name() const override { return name; }
+    [[nodiscard]] std::string get_name() const override { return name; }
 
   private:
     const std::string name = "SCCP";

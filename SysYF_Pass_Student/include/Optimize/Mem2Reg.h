@@ -27,7 +27,7 @@ class Mem2Reg : public Pass {
     void valueForwarding(BasicBlock *bb);
     void removeAlloc();
     void phiStatistic();
-    const std::string get_name() const override { return name; }
+    [[nodiscard]] std::string get_name() const override { return name; }
 
     static bool isVarOp(Instruction *inst, bool includeGlobal = false) {
         Value *lvalue{};

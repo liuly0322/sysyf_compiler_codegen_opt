@@ -21,9 +21,9 @@ class Check : public Pass {
 
   public:
     explicit Check(Module *m) : Pass(m) {}
-    ~Check() {}
+    ~Check() = default;
     void execute() final;
-    const std::string get_name() const override { return name; }
+    [[nodiscard]] std::string get_name() const override { return name; }
 
     // Debug Info Function
     template <typename T1, typename... Ts>

@@ -3,24 +3,20 @@
 
 #include "Module.h"
 #include "Pass.h"
-#include <vector>
 #include <map>
-#include <stack>
-#include <set>
 #include <memory>
+#include <set>
+#include <stack>
+#include <vector>
 
-class LoopInvariant : public Pass
-{
-public:
-    explicit LoopInvariant(Module* module): Pass(module){}
+class LoopInvariant : public Pass {
+  public:
+    explicit LoopInvariant(Module *module) : Pass(module) {}
     void execute() final;
-    const std::string get_name() const override {return name;}
+    [[nodiscard]] std::string get_name() const override { return name; }
 
-private:
+  private:
     std::string name = "LoopInvariant";
 };
-
-
-
 
 #endif
