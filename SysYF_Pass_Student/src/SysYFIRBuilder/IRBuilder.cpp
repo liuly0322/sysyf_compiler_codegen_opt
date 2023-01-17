@@ -857,13 +857,19 @@ void IRBuilder::visit(SyntaxTree::IfStmt &node) {
     }
     node.cond_exp->accept(*this);
     IF_While_Or_Cond_Stack.pop_back();
-    auto ret_val = tmp_val;
-    auto cond_val = dynamic_cast<CmpInst *>(ret_val);
-    auto f_cond_val = dynamic_cast<FCmpInst *>(ret_val);
+    auto *ret_val = tmp_val;
+    Value *cond_val = dynamic_cast<CmpInst *>(ret_val);
+    Value *f_cond_val = dynamic_cast<FCmpInst *>(ret_val);
     Value *cond;
     if (cond_val == nullptr && f_cond_val == nullptr) {
         if (tmp_val->get_type()->is_integer_type()) {
-            cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
+            // 如果是 zext 来的，说明可以用 zext 之前的值
+            // zext 语句可删可不删，可以交给后续代码优化部分
+            auto *inst = dynamic_cast<Instruction*>(tmp_val);
+            if (inst != nullptr && inst->is_zext())
+                cond_val = inst->get_operand(0);
+            else
+                cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
         } else if (tmp_val->get_type()->is_float_type()) {
             f_cond_val = builder->create_fcmp_ne(tmp_val, CONST_FLOAT(0));
         }
@@ -933,13 +939,19 @@ void IRBuilder::visit(SyntaxTree::WhileStmt &node) {
     IF_While_Or_Cond_Stack.push_back({trueBB, nextBB});
     node.cond_exp->accept(*this);
     IF_While_Or_Cond_Stack.pop_back();
-    auto ret_val = tmp_val;
-    auto cond_val = dynamic_cast<CmpInst *>(ret_val);
-    auto f_cond_val = dynamic_cast<FCmpInst *>(ret_val);
+    auto *ret_val = tmp_val;
+    Value *cond_val = dynamic_cast<CmpInst *>(ret_val);
+    Value *f_cond_val = dynamic_cast<FCmpInst *>(ret_val);
     Value *cond;
     if (cond_val == nullptr && f_cond_val == nullptr) {
         if (tmp_val->get_type()->is_integer_type()) {
-            cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
+            // 如果是 zext 来的，说明可以用 zext 之前的值
+            // zext 语句可删可不删，可以交给后续代码优化部分
+            auto *inst = dynamic_cast<Instruction*>(tmp_val);
+            if (inst != nullptr && inst->is_zext())
+                cond_val = inst->get_operand(0);
+            else
+                cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
         } else if (tmp_val->get_type()->is_float_type()) {
             f_cond_val = builder->create_fcmp_ne(tmp_val, CONST_FLOAT(0));
         }
