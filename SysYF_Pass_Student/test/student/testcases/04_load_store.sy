@@ -1,0 +1,17 @@
+int a = 3;
+int b = 4;
+
+int bar() {
+    a = 6;
+}
+
+int foo() {
+    bar();
+}
+
+int main() {
+    a = 5;
+    b = 5;
+    foo();
+    return a * 2 + 3 + b;
+}

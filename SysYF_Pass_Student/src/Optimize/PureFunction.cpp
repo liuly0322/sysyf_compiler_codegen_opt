@@ -8,6 +8,8 @@
 namespace PureFunction {
 
 std::unordered_map<Function *, bool> is_pure;
+std::unordered_map<Function *, std::set<GlobalVariable *>>
+    global_var_store_effects;
 
 AllocaInst *store_to_alloca(Instruction *inst) {
     // lval 无法转换为 alloca 指令说明是非局部的，有副作用
@@ -27,6 +29,9 @@ bool markPureInside(Function *f) {
         for (auto *inst : bb->get_instructions()) {
             // store 指令，且无法找到 alloca 作为左值，说明非局部变量
             if (inst->is_store() && store_to_alloca(inst) == nullptr) {
+                if (auto *var =
+                        dynamic_cast<GlobalVariable *>(inst->get_operand(1)))
+                    global_var_store_effects[f].insert(var);
                 return false;
             }
         }
@@ -38,23 +43,32 @@ void markPure(Module *module) {
     is_pure.clear();
     auto functions = module->get_functions();
     std::vector<Function *> work_list;
-    // 先考虑函数本身有无副作用，并将 worklists 初始化为非纯函数
+
     for (auto *f : functions) {
         is_pure[f] = markPureInside(f);
-        if (!is_pure[f]) {
+        if (!is_pure[f] || !global_var_store_effects[f].empty()) {
             work_list.push_back(f);
         }
     }
-    // 考虑非纯函数调用的「传染」
+
     for (auto i = 0U; i < work_list.size(); i++) {
         auto *callee_function = work_list[i];
         for (auto &use : callee_function->get_use_list()) {
             auto *call_inst = dynamic_cast<CallInst *>(use.val_);
             auto *caller_function = call_inst->get_function();
+            bool influenced{};
+            for (auto *var : global_var_store_effects[callee_function]) {
+                if (global_var_store_effects[caller_function].count(var) == 0) {
+                    global_var_store_effects[caller_function].insert(var);
+                    influenced = true;
+                }
+            }
             if (is_pure[caller_function]) {
                 is_pure[caller_function] = false;
-                work_list.push_back(caller_function);
+                influenced = true;
             }
+            if (influenced)
+                work_list.push_back(caller_function);
         }
     }
 }

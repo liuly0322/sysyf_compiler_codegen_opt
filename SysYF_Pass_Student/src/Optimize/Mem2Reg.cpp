@@ -1,7 +1,12 @@
 #include "Mem2Reg.h"
 #include "IRBuilder.h"
+#include "PureFunction.h"
+
+using PureFunction::global_var_store_effects;
+using PureFunction::markPure;
 
 void Mem2Reg::execute() {
+    markPure(module);
     for (auto *fun : module->get_functions()) {
         if (fun->is_declaration())
             continue;
@@ -20,11 +25,18 @@ void Mem2Reg::execute() {
 
 void Mem2Reg::insideBlockForwarding() {
     for (auto *bb : func_->get_basic_blocks()) {
-        std::map<Value *, StoreInst *> defined_list;
+        auto defined_list = std::map<Value *, StoreInst *>{};
 
         const auto insts = std::vector<Instruction *>{
             bb->get_instructions().begin(), bb->get_instructions().end()};
         for (auto *inst : insts) {
+            // 非纯函数调用将注销所有受影响全局变量的定值
+            if (inst->is_call()) {
+                auto *callee = static_cast<Function *>(inst->get_operand(0));
+                for (auto *var : global_var_store_effects[callee])
+                    defined_list.erase(var);
+            }
+
             if (!isVarOp(inst, true))
                 continue;
 
