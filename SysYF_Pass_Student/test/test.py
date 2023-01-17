@@ -263,6 +263,7 @@ if __name__ == "__main__":
         for Dir in fail_dirs:
             fail_dir_str += (Dir + "\t")
         print("\tTest Fail in dirs {}".format(fail_dir_str))
+        exit(1)
     else:
         print("\tAll Tests Passed")
         
