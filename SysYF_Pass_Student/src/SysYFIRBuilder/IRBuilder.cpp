@@ -577,10 +577,10 @@ void IRBuilder::visit(SyntaxTree::UnaryCondExpr &node) {
 }
 
 void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
-    CmpInst *cond_val;
-    FCmpInst *f_cond_val;
+    Value *cond_val;
+    Value *f_cond_val;
     if (node.op == SyntaxTree::BinaryCondOp::LAND) {
-        auto trueBB = BasicBlock::create(module.get(), "", cur_fun);
+        auto *trueBB = BasicBlock::create(module.get(), "", cur_fun);
         IF_While_And_Cond_Stack.push_back({trueBB, IF_While_Or_Cond_Stack.back().falseBB});
         node.lhs->accept(*this);
         IF_While_And_Cond_Stack.pop_back();
@@ -588,7 +588,11 @@ void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
         f_cond_val = dynamic_cast<FCmpInst *>(tmp_val);
         if (tmp_val->get_type()->is_integer_type() || cond_val != nullptr) {
             if (cond_val == nullptr) {
-                cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
+                auto *inst = dynamic_cast<Instruction*>(tmp_val);
+                if (inst != nullptr && inst->is_zext())
+                    cond_val = inst->get_operand(0);
+                else
+                    cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
             }
             builder->create_cond_br(cond_val, trueBB, IF_While_Or_Cond_Stack.back().falseBB);
         } else if (tmp_val->get_type()->is_float_type() || f_cond_val != nullptr) {
@@ -600,7 +604,7 @@ void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
         builder->set_insert_point(trueBB);
         node.rhs->accept(*this);
     } else if (node.op == SyntaxTree::BinaryCondOp::LOR) {
-        auto falseBB = BasicBlock::create(module.get(), "", cur_fun);
+        auto *falseBB = BasicBlock::create(module.get(), "", cur_fun);
         IF_While_Or_Cond_Stack.push_back({IF_While_Or_Cond_Stack.back().trueBB, falseBB});
         node.lhs->accept(*this);
         IF_While_Or_Cond_Stack.pop_back();
@@ -608,7 +612,11 @@ void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
         f_cond_val = dynamic_cast<FCmpInst *>(tmp_val);
         if (tmp_val->get_type()->is_integer_type() || cond_val != nullptr) {
             if (cond_val == nullptr) {
-                cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
+                auto *inst = dynamic_cast<Instruction*>(tmp_val);
+                if (inst != nullptr && inst->is_zext())
+                    cond_val = inst->get_operand(0);
+                else
+                    cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
             }
             builder->create_cond_br(cond_val, IF_While_Or_Cond_Stack.back().trueBB, falseBB);
         } else if (tmp_val->get_type()->is_float_type() || f_cond_val != nullptr) {
