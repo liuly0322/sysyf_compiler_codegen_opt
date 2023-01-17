@@ -1,78 +1,79 @@
-- [SysYFCodeGenOpt](#sysyfcodegenopt)
-  - [介绍](#介绍)
-  - [概述](#概述)
-  - [任务说明](#任务说明)
-    - [必做部分](#必做部分)
-    - [选做部分](#选做部分)
-      - [选题1-进阶优化](#选题1-进阶优化)
-      - [选题2-运行时空间管理与代码生成](#选题2-运行时空间管理与代码生成)
-      - [选题3-自由发挥](#选题3-自由发挥)
-    - [评测说明](#评测说明)
-    - [本实验设计及软件包的研发者](#本实验设计及软件包的研发者)
-# SysYFCodeGenOpt
+<div align="center">
+  
+# SysYF-CodeGenOpt
 
-## 介绍
+</div>
 
-本项目提供SysYF语言的中间表示(IR)优化以及代码生成的编译器实践框架和选题。SysYF语言是全国编译系统设计赛要求实现的SysY语言的扩展语言，SysYF IR兼容LLVM IR。该项目由中国科学技术大学张昱老师研究组设计和开发，旨在引导更多学生和社会人员学习和实践编译器相关知识，开展语言设计与实现、程序分析、编译优化等研发，让越来越多的人有能力运用程序语言基础提供可靠、高效的软件解决方案。
+<p align="center">
 
-## 概述
+  <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/opt.yml">
+    <img src="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/opt.yml/badge.svg">
+  </a>
 
-- **分组实验**：大实验以组为单位。
-- **公开仓库**：各组在希冀平台使用小组共有的仓库进行提交
-- **小组任务**：各组需要完成下面的**必做部分**，另外从**选做部分**中选择一项开展。
-- **实验提交**：各组需要在2022-12-25 22:00:00前在助教处确定选题
-- **时间安排**：实验时间初步定为2022-12-25 - 2023-01-10 23:59:59。答辩日期定为2023-01-12
+</p>
 
-## 任务说明
+## 简介
 
-本次实验分为必做部分和选做部分。你需要完成必做的全部内容并在选做的若干个选题中选择一个来做。你还需要完成一份实验报告，讲述你所做的工作。
+SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编译系统设计赛要求实现的 SysY 语言基础上增加了 float 类型和元素类型为 float 的数组类型。本仓库是 2022 年中国科学技术大学编译原理 H 课程的实验项目，主要完成了对中间代码（IR）的平台无关优化如下：
 
-### 必做部分
+- 稀疏条件常量传播
+- 公共子表达式消除
+- 死代码消除
 
-必做部分文件夹在[SysYF_Pass_Student](SysYF_Pass_Student/)，文档见[SysYF_Pass_Student/README.md](./SysYF_Pass_Student/README.md)
+原先的实验文档见 [实验文档](./doc.md)。
 
-### 选做部分
+## 环境搭建
 
-你需要在以下数字中选择一个，填在[select.txt](select.txt)中。
-- 1表示进阶优化，或者其他基于SysYF进行硬件无关优化的自由发挥；
-- 2表示运行时空间管理和代码生成，或者其他基于SysYF进行ARM相关优化的自由发挥；
-- 3表示其他不基于SysYF的自由发挥，由于评测条件的限制，建议进行兼容x86/64架构的优化。
+以 ubuntu 平台为例：
 
-[select.txt](select.txt)将被用于自动选择项目进行评测。
+```shell
+# 安装 clang, cmake, python3
+sudo apt install build-essential clang cmake python3
+# 进入项目目录
+cd SysYF_Pass_Student
+# 编译该 cmake 项目
+mkdir build
+cd build
+cmake ..
+# 多线程编译，如果单核环境可以去掉 -j
+make -j
+# 编译完成，生成可执行文件 compiler
+```
 
-#### 选题1-进阶优化
+## 运行说明
 
-该部分文件夹在[SysYF_Pass_Student](SysYF_Pass_Student/)。
+你可以通过如下方式运行编译器:
 
-在必做的基础上，你需要自行选择至少2个不同的优化Pass来进行进阶优化，并且设计测试程序来体现优化效果，撰写相应文档。详细说明和具体提交要求见[SysYF_Pass_Student/doc/进阶优化.md](SysYF_Pass_Student/doc/进阶优化.md)
+```
+./compiler [.sy文件路径] [参数] -o [生成文件路径]
+```
 
-#### 选题2-运行时空间管理与代码生成
+参数主要如下：
 
-该部分文件夹在[SysYF_Backend_Student](SysYF_Backend_Student/)
+- **-h** 或 **--help**: 打印提示信息
+- **-p** 或 **--trace_parsing**: 打印文法扫描过程
+- **-s** 或 **--trace_scanning**: 打印词法扫描过程
+- **-emit-ast**: 从语法树复原代码
+- **-emit-ir**: 生成 IR
+- **-check**: 类型检查
+- **-O**: 将 IR 转化为 SSA 格式
+- **-O -cse**: 开启公共子表达式删除优化
+- **-O -sccp**: 开启稀疏条件常量传播优化
+- **-O -dce**: 开启死代码删除优化
+- **-O2**: 开启全部优化
 
-详细文档见[backend.md](SysYF_Backend_Student/doc/backend.md)。
+例如:
 
-#### 选题3-自由发挥
+```
+./compiler test.sy -emit-ir -O -cse -o test.ll
+```
 
-你也可以不做以上给出的选题，而做你认为有意义的选题，但需要在实验报告、答辩中详细阐述你所做的工作。你需要在实验报告中给出至少以下几方面的内容：
+表示对 `test.sy` 分析，生成 `IR` 并执行公共子表达式删除优化，结果保存在 `test.ll` 文件中。
 
-- 问题描述：陈述你要解决的问题，它在哪些场景下存在缺陷或改进空间？
-- 背景与动机：陈述所要解决的问题的相关背景，比如在什么情况下会出现，有什么样的影响；该问题若解决，会有什么样的价值和意义；该问题相关的研究现状；等等。
-- 设计思路：解决问题的流程包含哪些关键步骤和想法？
-- 实现要点：实际实现时所采用的关键数据结构，存在哪些与理论不完全一致的部分或者需要特殊处理的？
-- 评测：需要自行提供测试例子以及测试脚本，指出在什么样的测试例子上运行能够突显优化效果，或者会引起局限？
-- 参考文献：列出所参考的相关工作。
+## 测试
 
-评测部分，请编写自动评测脚本[FreeStyle/test/student/eval.sh](FreeStyle/test/student/eval.sh)与样例（样例放在[FreeStyle/test/student](FreeStyle/test/student/)目录下）进行展示。脚本将会在bash环境下执行。该测试脚本可用于驱动其他脚本。请在脚本中自行添加在评测时要用到的环境变量。**脚本中应采用相对路径，避免采用绝对路径**，因为提交的项目可能置于评测机的不同路径下。
+`SysYF_Pass_Student/test/test.py` 提供了检验正确性和测试优化效果的脚本。
 
-学生编写的评测脚本运行时向stdout的输出将被收集作为待助教评判的内容。
+例如，在 `SysYF_Pass_Student/test` 工作目录下，以下命令会检查三个优化全部开启后的优化效果。
 
-### 评测说明
-
-- 你需要修改相应选题下的评测脚本，对于选择为1或3的同学，需要修改[SysYF_Pass_Student/test/student/eval.sh](SysYF_Pass_Student/test/student/eval.sh) 或 [FreeStyle/test/student/eval.sh](FreeStyle/test/student/eval.sh); 对于选择为2的同学，需要修改[SysYF_Backend_Student/test/student/build_asm.sh](SysYF_Backend_Student/test/student/build_asm.sh) , [SysYF_Backend_Student/test/student/run_exec.sh](SysYF_Backend_Student/test/student/run_exec.sh) 。
-- 选做部分的评测脚本编写说明见相应选题部分。
-- 自动评测的结果将写在对应选题文件夹下的`test/student/run_result.txt`中。
-
-### 本实验设计及软件包的研发者
-
-该版本的实验由中国科学技术大学计算机科学与技术学院张昱老师和承担2022年秋季学期《编译原理和技术(H)》的4位助教（2021级研究生和2019级本科生）研讨而设计，内容基于2021年秋季学期的6位助教实现的初版。实验软件包中如有不当或问题，欢迎反馈。
+`python test.py -sccp -cse -dce`
