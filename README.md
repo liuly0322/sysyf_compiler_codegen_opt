@@ -20,7 +20,22 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
 - 公共子表达式消除
 - 死代码消除
 
+使用 Github Actions 进行自动 CI 测试，使用 clang-format 格式化项目代码风格。
+
 原先的实验文档见 [实验文档](./doc.md)。
+
+除了增添的优化 Pass 外，另对框架做出如下修改：
+
+- 对框架接口做出修改，以支持直接反向支配结点的获取
+- 修复 `remove_operand` 不更新 `use.arg_no_` 的 bug
+- 修复 IRBuilder 部分 alloca 指令 parent 设置错误的 bug
+- 在维护基本块前驱后继时：
+  - 对于添加操作，会首先判断前驱或后继链表中是否已存在需要添加的基本块
+  - 对于删除前驱操作，会首先移除来自该前驱的 phi 指令信息
+- 修复框架中所有 int 和 unsigned 比较引起的 warning
+- 框架中增添转发基本块内全局变量定值引用的功能
+- 消除了 IRBuilder 带来的无用的 zext 和非零比较
+- 修复了 IR 头文件循环引用的问题
 
 ## 环境搭建
 
@@ -74,6 +89,6 @@ make -j
 
 `SysYF_Pass_Student/test/test.py` 提供了检验正确性和测试优化效果的脚本。
 
-例如，在 `SysYF_Pass_Student/test` 工作目录下，以下命令会检查三个优化全部开启后的优化效果。
+例如，在 `SysYF_Pass_Student/test` 工作目录下，以下命令会检查三个优化全部开启后的优化效果：
 
 `python test.py -sccp -cse -dce`
