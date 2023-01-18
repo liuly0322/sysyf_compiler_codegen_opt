@@ -2,7 +2,7 @@
 #define SYSYF_PUREFUNCTION_H
 
 #include "PureFunction.h"
-#include "BasicBlock.h"
+#include "Module.h"
 #include <unordered_map>
 
 namespace PureFunction {

@@ -16,7 +16,8 @@
 
 void print_help(const std::string &exe_name) {
     std::cout << "Usage: " << exe_name
-              << " [ -h | --help ] [ -p | --trace_parsing ] [ -s | --trace_scanning ] [ -emit-ast ] [ -check ]"
+              << " [ -h | --help ] [ -p | --trace_parsing ] [ -s | "
+                 "--trace_scanning ] [ -emit-ast ] [ -check ]"
               << " [ -emit-ir ] [ -O2 ] [ -O ] [ -av ] [ -o <output-file> ]"
               << " <input-file>" << std::endl;
 }
@@ -44,9 +45,11 @@ int main(int argc, char *argv[]) {
         if (argv[i] == std::string("-h") || argv[i] == std::string("--help")) {
             print_help(argv[0]);
             return 0;
-        } else if (argv[i] == std::string("-p") || argv[i] == std::string("--trace_parsing")) {
+        } else if (argv[i] == std::string("-p") ||
+                   argv[i] == std::string("--trace_parsing")) {
             driver.trace_parsing = true;
-        } else if (argv[i] == std::string("-s") || argv[i] == std::string("--trace_scanning")) {
+        } else if (argv[i] == std::string("-s") ||
+                   argv[i] == std::string("--trace_scanning")) {
             driver.trace_scanning = true;
         } else if (argv[i] == std::string("-emit-ast")) {
             print_ast = true;

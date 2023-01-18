@@ -1,6 +1,4 @@
 #include "Mem2Reg.h"
-#include "IRBuilder.h"
-#include "PureFunction.h"
 
 using PureFunction::global_var_store_effects;
 using PureFunction::markPure;

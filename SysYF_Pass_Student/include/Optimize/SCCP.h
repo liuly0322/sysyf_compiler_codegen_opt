@@ -1,7 +1,6 @@
 #ifndef SYSYF_SCCP_H
 #define SYSYF_SCCP_H
 
-#include "Module.h"
 #include "Pass.h"
 
 class SCCP : public Pass {

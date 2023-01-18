@@ -1,13 +1,7 @@
 #ifndef CHECK_H
 #define CHECK_H
 
-#include "BasicBlock.h"
-#include "Function.h"
-#include "GlobalVariable.h"
-#include "Instruction.h"
-#include "Module.h"
 #include "Pass.h"
-#include "User.h"
 #include <string>
 
 class Check : public Pass {

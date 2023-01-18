@@ -3,9 +3,8 @@
 
 #include "SyntaxTree.h"
 
-class SyntaxTreePrinter : public SyntaxTree::Visitor
-{
-public:
+class SyntaxTreePrinter : public SyntaxTree::Visitor {
+  public:
     virtual void visit(SyntaxTree::Assembly &node) override;
     virtual void visit(SyntaxTree::FuncDef &node) override;
     virtual void visit(SyntaxTree::BinaryExpr &node) override;
@@ -29,8 +28,9 @@ public:
     virtual void visit(SyntaxTree::ContinueStmt &node) override;
     virtual void visit(SyntaxTree::InitVal &node) override;
     void print_indent();
-private:
+
+  private:
     int indent = 0;
 };
 
-#endif  // _SYSYF_SYNTAX_TREE_PRINTER_H_
+#endif // _SYSYF_SYNTAX_TREE_PRINTER_H_

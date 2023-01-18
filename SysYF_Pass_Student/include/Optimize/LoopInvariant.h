@@ -1,7 +1,6 @@
 #ifndef MHSJ_LOOPINVARIANT_H
 #define MHSJ_LOOPINVARIANT_H
 
-#include "Module.h"
 #include "Pass.h"
 #include <map>
 #include <memory>

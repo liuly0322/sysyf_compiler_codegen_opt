@@ -1,12 +1,9 @@
 #ifndef SYSYF_MEM2REG_H
 #define SYSYF_MEM2REG_H
 
-#include "BasicBlock.h"
-#include "Function.h"
 #include "IRBuilder.h"
-#include "Instruction.h"
-#include "Module.h"
 #include "Pass.h"
+#include "PureFunction.h"
 
 class Mem2Reg : public Pass {
   private:

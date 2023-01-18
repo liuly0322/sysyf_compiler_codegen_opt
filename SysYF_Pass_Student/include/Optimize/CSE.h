@@ -1,12 +1,6 @@
 #ifndef SYSYF_CSE_H
 #define SYSYF_CSE_H
 
-#include "BasicBlock.h"
-#include "Constant.h"
-#include "Function.h"
-#include "GlobalVariable.h"
-#include "Instruction.h"
-#include "Module.h"
 #include "Pass.h"
 #include "PureFunction.h"
 #include <map>

@@ -1,23 +1,21 @@
 #ifndef _SYSYF_VALUE_H_
 #define _SYSYF_VALUE_H_
 
-#include <string>
-#include <list>
+#include "Type.h"
 #include <iostream>
+#include <list>
+#include <string>
 
-class Type;
 class Value;
 
-struct Use
-{
+struct Use {
     Value *val_;
-    unsigned arg_no_;     // the no. of operand, e.g., func(a, b), a is 0, b is 1
+    unsigned arg_no_; // the no. of operand, e.g., func(a, b), a is 0, b is 1
     Use(Value *val, unsigned no) : val_(val), arg_no_(no) {}
 };
 
-class Value
-{
-public:
+class Value {
+  public:
     explicit Value(Type *ty, const std::string &name = "");
     ~Value() = default;
 
@@ -27,13 +25,12 @@ public:
 
     void add_use(Value *val, unsigned arg_no = 0);
 
-    bool set_name(std::string name) { 
-        if (name_ == "")
-        {
-            name_=name;
+    bool set_name(std::string name) {
+        if (name_ == "") {
+            name_ = name;
             return true;
-        }   
-        return false; 
+        }
+        return false;
     }
     std::string get_name() const;
 
@@ -41,10 +38,11 @@ public:
     void remove_use(Value *val);
 
     virtual std::string print() = 0;
-private:
+
+  private:
     Type *type_;
-    std::list<Use> use_list_;   // who use this value
-    std::string name_;    // should we put name field here ?
+    std::list<Use> use_list_; // who use this value
+    std::string name_;        // should we put name field here ?
 };
 
 #endif // _SYSYF_VALUE_H_

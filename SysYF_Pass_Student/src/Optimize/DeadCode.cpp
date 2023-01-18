@@ -1,8 +1,4 @@
 #include "DeadCode.h"
-#include "BasicBlock.h"
-#include "Instruction.h"
-#include "PureFunction.h"
-#include "Value.h"
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>

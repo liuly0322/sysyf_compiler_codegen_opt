@@ -1,8 +1,6 @@
 #ifndef SYSYF_RDOMINATETREE_H
 #define SYSYF_RDOMINATETREE_H
 
-#include "BasicBlock.h"
-#include "Module.h"
 #include "Pass.h"
 #include <map>
 #include <memory>

@@ -1,7 +1,7 @@
 #ifndef SYSYF_PUREFUNCTION_H
 #define SYSYF_PUREFUNCTION_H
 
-#include "BasicBlock.h"
+#include "Module.h"
 #include <set>
 #include <unordered_map>
 

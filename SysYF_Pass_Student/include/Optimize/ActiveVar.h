@@ -1,7 +1,6 @@
 #ifndef SYSYF_ACTIVEVAR_H
 #define SYSYF_ACTIVEVAR_H
 
-#include "Module.h"
 #include "Pass.h"
 
 class ActiveVar : public Pass {

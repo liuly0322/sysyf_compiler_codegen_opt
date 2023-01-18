@@ -1,8 +1,8 @@
 #ifndef SYSYF_DEADCODE_H
 #define SYSYF_DEADCODE_H
 
-#include "Module.h"
 #include "Pass.h"
+#include "PureFunction.h"
 #include <unordered_map>
 #include <unordered_set>
 

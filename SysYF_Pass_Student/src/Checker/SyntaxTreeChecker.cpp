@@ -2,7 +2,7 @@
 
 using namespace SyntaxTree;
 
-void SyntaxTreeChecker::visit(Assembly& node) {
+void SyntaxTreeChecker::visit(Assembly &node) {
     enter_scope();
     for (auto def : node.global_defs) {
         def->accept(*this);
@@ -10,7 +10,7 @@ void SyntaxTreeChecker::visit(Assembly& node) {
     exit_scope();
 }
 
-void SyntaxTreeChecker::visit(FuncDef& node) {
+void SyntaxTreeChecker::visit(FuncDef &node) {
     if (!declare_functions(node.name, node.ret_type, node.param_list)) {
         err.error(node.loc, "Duplicated functions declare!");
         exit(int(ErrorType::FuncDuplicated));
@@ -21,7 +21,7 @@ void SyntaxTreeChecker::visit(FuncDef& node) {
     exit_scope();
 }
 
-void SyntaxTreeChecker::visit(BinaryExpr& node) {
+void SyntaxTreeChecker::visit(BinaryExpr &node) {
     node.lhs->accept(*this);
     bool lhs_int = this->Expr_int;
     node.rhs->accept(*this);
@@ -35,26 +35,22 @@ void SyntaxTreeChecker::visit(BinaryExpr& node) {
     this->Expr_int = lhs_int & rhs_int;
 }
 
-void SyntaxTreeChecker::visit(UnaryExpr& node) {
-    node.rhs->accept(*this);
-}
+void SyntaxTreeChecker::visit(UnaryExpr &node) { node.rhs->accept(*this); }
 
-void SyntaxTreeChecker::visit(LVal& node) {
+void SyntaxTreeChecker::visit(LVal &node) {
     if (!lookup_variable(node.name, this->Expr_int)) {
         err.error(node.loc, "Unknown variable!");
         exit(int(ErrorType::VarUnknown));
     }
 }
 
-void SyntaxTreeChecker::visit(Literal& node) {
+void SyntaxTreeChecker::visit(Literal &node) {
     this->Expr_int = (node.literal_type == SyntaxTree::Type::INT);
 }
 
-void SyntaxTreeChecker::visit(ReturnStmt& node) {
-    node.ret->accept(*this);
-}
+void SyntaxTreeChecker::visit(ReturnStmt &node) { node.ret->accept(*this); }
 
-void SyntaxTreeChecker::visit(VarDef& node) {
+void SyntaxTreeChecker::visit(VarDef &node) {
     if (node.is_inited) {
         node.initializers->accept(*this);
     }
@@ -64,11 +60,11 @@ void SyntaxTreeChecker::visit(VarDef& node) {
     }
 }
 
-void SyntaxTreeChecker::visit(AssignStmt& node) {
+void SyntaxTreeChecker::visit(AssignStmt &node) {
     node.target->accept(*this);
     node.value->accept(*this);
 }
-void SyntaxTreeChecker::visit(FuncCallStmt& node) {
+void SyntaxTreeChecker::visit(FuncCallStmt &node) {
     for (auto param : node.params) {
         param->accept(*this);
     }
@@ -92,43 +88,43 @@ void SyntaxTreeChecker::visit(FuncCallStmt& node) {
     }
     this->Expr_int = function->ret_int;
 }
-void SyntaxTreeChecker::visit(BlockStmt& node) {
+void SyntaxTreeChecker::visit(BlockStmt &node) {
     for (auto stmt : node.body) {
-        if (dynamic_cast<BlockStmt*>(stmt.get())) {
+        if (dynamic_cast<BlockStmt *>(stmt.get())) {
             enter_scope();
         }
         stmt->accept(*this);
-        if (dynamic_cast<BlockStmt*>(stmt.get())) {
+        if (dynamic_cast<BlockStmt *>(stmt.get())) {
             exit_scope();
         }
     }
 }
-void SyntaxTreeChecker::visit(EmptyStmt& node) {}
-void SyntaxTreeChecker::visit(SyntaxTree::ExprStmt& node) {
+void SyntaxTreeChecker::visit(EmptyStmt &node) {}
+void SyntaxTreeChecker::visit(SyntaxTree::ExprStmt &node) {
     node.exp->accept(*this);
 }
 
-void SyntaxTreeChecker::visit(SyntaxTree::FuncParam& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::FuncParam &node) {
     if (!declare_variable(node.name, node.param_type)) {
         err.error(node.loc, "Duplicated variables declare!");
         exit(int(ErrorType::VarDuplicated));
     }
 }
 
-void SyntaxTreeChecker::visit(SyntaxTree::FuncFParamList& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::FuncFParamList &node) {
     for (auto param : node.params) {
         param->accept(*this);
     }
 }
 
-void SyntaxTreeChecker::visit(SyntaxTree::BinaryCondExpr& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::BinaryCondExpr &node) {
     node.lhs->accept(*this);
     node.rhs->accept(*this);
 }
-void SyntaxTreeChecker::visit(SyntaxTree::UnaryCondExpr& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::UnaryCondExpr &node) {
     node.rhs->accept(*this);
 }
-void SyntaxTreeChecker::visit(SyntaxTree::IfStmt& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::IfStmt &node) {
     node.cond_exp->accept(*this);
     enter_scope();
     node.if_statement->accept(*this);
@@ -139,20 +135,19 @@ void SyntaxTreeChecker::visit(SyntaxTree::IfStmt& node) {
         exit_scope();
     }
 }
-void SyntaxTreeChecker::visit(SyntaxTree::WhileStmt& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::WhileStmt &node) {
     node.cond_exp->accept(*this);
     enter_scope();
     node.statement->accept(*this);
     exit_scope();
 }
-void SyntaxTreeChecker::visit(SyntaxTree::BreakStmt& node) {}
-void SyntaxTreeChecker::visit(SyntaxTree::ContinueStmt& node) {}
+void SyntaxTreeChecker::visit(SyntaxTree::BreakStmt &node) {}
+void SyntaxTreeChecker::visit(SyntaxTree::ContinueStmt &node) {}
 
-void SyntaxTreeChecker::visit(SyntaxTree::InitVal& node) {
+void SyntaxTreeChecker::visit(SyntaxTree::InitVal &node) {
     if (node.isExp) {
         node.expr->accept(*this);
-    } 
-    else {
+    } else {
         for (auto element : node.elementList) {
             element->accept(*this);
         }

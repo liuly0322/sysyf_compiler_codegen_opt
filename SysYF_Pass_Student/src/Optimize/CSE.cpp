@@ -1,10 +1,4 @@
 #include "CSE.h"
-#include "BasicBlock.h"
-#include "Function.h"
-#include "GlobalVariable.h"
-#include "Instruction.h"
-#include "Pass.h"
-#include "Value.h"
 #include <algorithm>
 #include <iostream>
 #include <ostream>

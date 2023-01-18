@@ -1,9 +1,4 @@
 #include "SCCP.h"
-#include "BasicBlock.h"
-#include "Constant.h"
-#include "GlobalVariable.h"
-#include "Instruction.h"
-#include "Value.h"
 #include <string>
 #include <sys/types.h>
 #include <unordered_map>
