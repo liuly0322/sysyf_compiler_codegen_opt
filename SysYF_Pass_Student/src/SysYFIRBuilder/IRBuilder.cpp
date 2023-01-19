@@ -1,69 +1,310 @@
+/**
+ * @file IRBuilder.cpp
+ * @author liuly (me@liuly.moe)
+ * @brief IRBuilder 简易实现
+ * @version 0.1
+ * @date 2022-12-08
+ * 一个 SysYF IRBuilder 的简易实现，目前仅支持一维数组
+ * @copyright Copyright (c) 2022
+ */
+
 #include "IRBuilder.h"
 
 #define CONST_INT(num) ConstantInt::get(num, module.get())
 #define CONST_FLOAT(num) ConstantFloat::get(num, module.get())
 
-// You can define global variables here
-// to store state
+// Global variables and functions here to store state
+// last visited expr
+Value *prev_expr = nullptr;
 
-// store variable type
-Type *var_type = nullptr;
-// store temporary value
-Value *tmp_val = nullptr;
-// whether require lvalue
-bool require_lvalue = false;
-// function that is being built
-Function *cur_fun = nullptr;
-// detect scope pre-enter (for elegance only)
-bool pre_enter_scope = false;
+// 函数栈内维护 While 嵌套结构
+struct WhileStructType {
+    BasicBlock *condBB;
+    BasicBlock *innerBB;
+    BasicBlock *exitBB;
+};
+auto curWhileStruct = WhileStructType{nullptr, nullptr, nullptr};
+
+// 函数栈内维护跳转信息
+struct CondStructType {
+    BasicBlock *trueBB;
+    BasicBlock *falseBB;
+};
+auto curCondStruct = CondStructType{nullptr, nullptr};
 
 // types
 Type *VOID_T;
 Type *INT1_T;
 Type *INT32_T;
 Type *FLOAT_T;
-Type *INT32PTR_T;
-Type *FLOATPTR_T;
 
-/* Global Variable */
-
-// used for backpatching
-struct true_false_BB {
-    BasicBlock *trueBB = nullptr;
-    BasicBlock *falseBB = nullptr;
-};
-
-std::list<true_false_BB> IF_While_And_Cond_Stack; // used for Cond
-std::list<true_false_BB> IF_While_Or_Cond_Stack;  // used for Cond
-std::list<true_false_BB> While_Stack;             // used for break and continue
-// used for backpatching
-std::vector<BasicBlock *> cur_basic_block_list;
-std::vector<SyntaxTree::FuncParam> func_params;
-
-std::vector<Constant *> init_val;
-std::map<Value *, Value *> local2global;
-
-// ret BB
+// return val
 BasicBlock *ret_BB;
 Value *ret_addr;
 
-/* Global Variable */
+Type *baseTypetoLLVMTy(SyntaxTree::Type type) {
+    switch (type) {
+    case SyntaxTree::Type::INT:
+        return INT32_T;
+    case SyntaxTree::Type::VOID:
+        return VOID_T;
+    case SyntaxTree::Type::BOOL:
+        return INT1_T;
+    case SyntaxTree::Type::FLOAT:
+        return FLOAT_T;
+    default:
+        return nullptr;
+    }
+}
 
-bool match_type(IRStmtBuilder *builder, Value **lhs_ptr, Value **rhs_ptr) {
-    bool both_int;
-    auto &lhs = *lhs_ptr;
-    auto &rhs = *rhs_ptr;
-    if (lhs->get_type() == rhs->get_type()) {
-        both_int = lhs->get_type()->is_integer_type();
+Type *SyntaxTreeTytoLLVMTy(SyntaxTree::Type type, bool isPtr = false) {
+    Type *base_type = baseTypetoLLVMTy(type);
+    if (base_type == nullptr || !isPtr) {
+        return base_type;
+    };
+    return Type::get_pointer_type(base_type);
+}
+
+void IRBuilder::typeConvert(Type *expected) {
+    // Constants
+    if (dynamic_cast<Constant *>(prev_expr) != nullptr) {
+        auto *prev_int = dynamic_cast<ConstantInt *>(prev_expr);
+        auto *prev_float = dynamic_cast<ConstantFloat *>(prev_expr);
+        if (prev_int != nullptr) {
+            if (expected == FLOAT_T)
+                prev_expr = CONST_FLOAT(prev_int->get_value());
+            else if (expected == INT1_T)
+                prev_expr = CONST_INT(prev_int->get_value() != 0);
+        }
+        if (prev_float != nullptr) {
+            if (expected == INT32_T)
+                prev_expr =
+                    CONST_INT(static_cast<int>(prev_float->get_value()));
+            else if (expected == INT1_T)
+                prev_expr = CONST_INT(prev_float->get_value() != 0);
+        }
+        return;
+    }
+
+    auto *type = prev_expr->get_type();
+    if (type == expected) {
+        return;
+    }
+
+    // pointer deref
+    if (type->is_pointer_type()) {
+        type = type->get_pointer_element_type();
+        prev_expr = builder->create_load(prev_expr);
+    }
+
+    if (type == INT32_T && expected == FLOAT_T) {
+        prev_expr = builder->create_sitofp(prev_expr, expected);
+        return;
+    }
+    if (type == FLOAT_T && expected == INT32_T) {
+        prev_expr = builder->create_fptosi(prev_expr, expected);
+        return;
+    }
+    if (type == INT32_T && expected == INT1_T) {
+        prev_expr = builder->create_icmp_ne(prev_expr, CONST_INT(0));
+        return;
+    }
+    if (type == FLOAT_T && expected == INT1_T) {
+        prev_expr = builder->create_fcmp_ne(prev_expr, CONST_FLOAT(0));
+        return;
+    }
+}
+
+void IRBuilder::binOpGen(Value *lhs, Value *rhs, BinOp op) {
+    // For Both Constants
+    if ((dynamic_cast<Constant *>(lhs) != nullptr) &&
+        (dynamic_cast<Constant *>(rhs) != nullptr)) {
+        if ((dynamic_cast<ConstantFloat *>(lhs) != nullptr) ||
+            (dynamic_cast<ConstantFloat *>(rhs) != nullptr)) {
+            float lOperand;
+            float rOperand;
+            if (dynamic_cast<ConstantInt *>(lhs) != nullptr) {
+                lOperand = dynamic_cast<ConstantInt *>(lhs)->get_value();
+            } else {
+                lOperand = dynamic_cast<ConstantFloat *>(lhs)->get_value();
+            }
+            if (dynamic_cast<ConstantInt *>(rhs) != nullptr) {
+                rOperand = dynamic_cast<ConstantInt *>(rhs)->get_value();
+            } else {
+                rOperand = dynamic_cast<ConstantFloat *>(rhs)->get_value();
+            }
+            if (op.flag == BinOp::isBinOp) {
+                switch (op.bin_op) {
+                case SyntaxTree::BinOp::PLUS:
+                    prev_expr = CONST_FLOAT(lOperand + rOperand);
+                    break;
+                case SyntaxTree::BinOp::MINUS:
+                    prev_expr = CONST_FLOAT(lOperand - rOperand);
+                    break;
+                case SyntaxTree::BinOp::MULTIPLY:
+                    prev_expr = CONST_FLOAT(lOperand * rOperand);
+                    break;
+                case SyntaxTree::BinOp::DIVIDE:
+                    prev_expr = CONST_FLOAT(lOperand / rOperand);
+                    break;
+                default:
+                    break;
+                }
+            } else {
+                switch (op.bin_cond_op) {
+                case SyntaxTree::BinaryCondOp::LT:
+                    prev_expr = CONST_INT(lOperand < rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::LTE:
+                    prev_expr = CONST_INT(lOperand <= rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::GT:
+                    prev_expr = CONST_INT(lOperand > rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::GTE:
+                    prev_expr = CONST_INT(lOperand >= rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::EQ:
+                    prev_expr = CONST_INT(lOperand == rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::NEQ:
+                    prev_expr = CONST_INT(lOperand != rOperand);
+                    break;
+                default:
+                    break;
+                }
+            }
+        } else {
+            const int lOperand = dynamic_cast<ConstantInt *>(lhs)->get_value();
+            const int rOperand = dynamic_cast<ConstantInt *>(rhs)->get_value();
+            if (op.flag == BinOp::isBinOp) {
+                switch (op.bin_op) {
+                case SyntaxTree::BinOp::PLUS:
+                    prev_expr = CONST_INT(lOperand + rOperand);
+                    break;
+                case SyntaxTree::BinOp::MINUS:
+                    prev_expr = CONST_INT(lOperand - rOperand);
+                    break;
+                case SyntaxTree::BinOp::MULTIPLY:
+                    prev_expr = CONST_INT(lOperand * rOperand);
+                    break;
+                case SyntaxTree::BinOp::DIVIDE:
+                    prev_expr = CONST_INT(lOperand / rOperand);
+                    break;
+                case SyntaxTree::BinOp::MODULO:
+                    prev_expr = CONST_INT(lOperand % rOperand);
+                    break;
+                }
+            } else {
+                switch (op.bin_cond_op) {
+                case SyntaxTree::BinaryCondOp::LT:
+                    prev_expr = CONST_INT(lOperand < rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::LTE:
+                    prev_expr = CONST_INT(lOperand <= rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::GT:
+                    prev_expr = CONST_INT(lOperand > rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::GTE:
+                    prev_expr = CONST_INT(lOperand >= rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::EQ:
+                    prev_expr = CONST_INT(lOperand == rOperand);
+                    break;
+                case SyntaxTree::BinaryCondOp::NEQ:
+                    prev_expr = CONST_INT(lOperand != rOperand);
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+        return;
+    }
+
+    // For pointers
+    if (lhs->get_type()->is_pointer_type()) {
+        lhs = builder->create_load(lhs);
+    }
+    if (rhs->get_type()->is_pointer_type()) {
+        rhs = builder->create_load(rhs);
+    }
+
+    // Type convert
+    if (lhs->get_type()->is_float_type() &&
+        rhs->get_type()->is_integer_type()) {
+        rhs = builder->create_sitofp(rhs, FLOAT_T);
+    }
+    if (lhs->get_type()->is_integer_type() &&
+        rhs->get_type()->is_float_type()) {
+        lhs = builder->create_sitofp(lhs, FLOAT_T);
+    }
+    const bool is_int = lhs->get_type()->is_integer_type();
+    if (op.flag == BinOp::isBinOp) {
+        switch (op.bin_op) {
+        case SyntaxTree::BinOp::PLUS:
+            prev_expr = is_int ? builder->create_iadd(lhs, rhs)
+                               : builder->create_fadd(lhs, rhs);
+            break;
+        case SyntaxTree::BinOp::MINUS:
+            prev_expr = is_int ? builder->create_isub(lhs, rhs)
+                               : builder->create_fsub(lhs, rhs);
+            break;
+        case SyntaxTree::BinOp::MULTIPLY:
+            prev_expr = is_int ? builder->create_imul(lhs, rhs)
+                               : builder->create_fmul(lhs, rhs);
+            break;
+        case SyntaxTree::BinOp::DIVIDE:
+            prev_expr = is_int ? builder->create_isdiv(lhs, rhs)
+                               : builder->create_fdiv(lhs, rhs);
+            break;
+        case SyntaxTree::BinOp::MODULO:
+            prev_expr = builder->create_isrem(lhs, rhs);
+            break;
+        }
     } else {
-        both_int = false;
-        if (lhs->get_type()->is_integer_type()) {
-            lhs = builder->create_sitofp(lhs, FLOAT_T);
-        } else if (rhs->get_type()->is_integer_type()) {
-            rhs = builder->create_sitofp(rhs, FLOAT_T);
+        switch (op.bin_cond_op) {
+        case SyntaxTree::BinaryCondOp::LT:
+            if (is_int)
+                prev_expr = builder->create_icmp_lt(lhs, rhs);
+            else
+                prev_expr = builder->create_fcmp_lt(lhs, rhs);
+            break;
+        case SyntaxTree::BinaryCondOp::LTE:
+            if (is_int)
+                prev_expr = builder->create_icmp_le(lhs, rhs);
+            else
+                prev_expr = builder->create_fcmp_le(lhs, rhs);
+            break;
+        case SyntaxTree::BinaryCondOp::GT:
+            if (is_int)
+                prev_expr = builder->create_icmp_gt(lhs, rhs);
+            else
+                prev_expr = builder->create_fcmp_gt(lhs, rhs);
+            break;
+        case SyntaxTree::BinaryCondOp::GTE:
+            if (is_int)
+                prev_expr = builder->create_icmp_ge(lhs, rhs);
+            else
+                prev_expr = builder->create_fcmp_ge(lhs, rhs);
+            break;
+        case SyntaxTree::BinaryCondOp::EQ:
+            if (is_int)
+                prev_expr = builder->create_icmp_eq(lhs, rhs);
+            else
+                prev_expr = builder->create_fcmp_eq(lhs, rhs);
+            break;
+        case SyntaxTree::BinaryCondOp::NEQ:
+            if (is_int)
+                prev_expr = builder->create_icmp_ne(lhs, rhs);
+            else
+                prev_expr = builder->create_fcmp_ne(lhs, rhs);
+            break;
+        default:
+            break;
         }
     }
-    return both_int;
 }
 
 void IRBuilder::visit(SyntaxTree::Assembly &node) {
@@ -71,1000 +312,459 @@ void IRBuilder::visit(SyntaxTree::Assembly &node) {
     INT1_T = Type::get_int1_type(module.get());
     INT32_T = Type::get_int32_type(module.get());
     FLOAT_T = Type::get_float_type(module.get());
-    INT32PTR_T = Type::get_int32_ptr_type(module.get());
-    FLOATPTR_T = Type::get_float_ptr_type(module.get());
     for (const auto &def : node.global_defs) {
         def->accept(*this);
     }
 }
 
-void IRBuilder::visit(SyntaxTree::InitVal &node) {
-    // simple ver
-    if (node.isExp) {
-        node.expr->accept(*this);
-        auto tmp_int32_val = dynamic_cast<ConstantInt *>(tmp_val);
-        auto tmp_float_val = dynamic_cast<ConstantFloat *>(tmp_val);
-        if (var_type == INT32_T && tmp_float_val != nullptr) {
-            if (tmp_float_val)
-                tmp_val = CONST_INT(int(tmp_float_val->get_value()));
-        } else if (var_type == FLOAT_T && tmp_int32_val != nullptr) {
-            tmp_val = CONST_FLOAT(float(tmp_int32_val->get_value()));
-        }
-        init_val.push_back(dynamic_cast<Constant *>(tmp_val));
-    } else {
-        for (const auto &elem : node.elementList) {
-            elem->accept(*this);
-        }
-    }
-}
-
 void IRBuilder::visit(SyntaxTree::FuncDef &node) {
-    FunctionType *fun_type;
-    Type *ret_type;
-    if (node.ret_type == SyntaxTree::Type::INT)
-        ret_type = INT32_T;
-    else if (node.ret_type == SyntaxTree::Type::FLOAT)
-        ret_type = FLOAT_T;
-    else
-        ret_type = VOID_T;
-
-    std::vector<Type *> param_types;
-    std::vector<SyntaxTree::FuncParam>().swap(func_params);
-    node.param_list->accept(*this);
-    for (const auto &param : func_params) {
-        if (param.param_type == SyntaxTree::Type::INT) {
-            if (param.array_index.empty()) {
-                param_types.push_back(INT32_T);
-            } else {
-                param_types.push_back(INT32PTR_T);
-            }
-        } else if (param.param_type == SyntaxTree::Type::FLOAT) {
-            if (param.array_index.empty()) {
-                param_types.push_back(FLOAT_T);
-            } else {
-                param_types.push_back(FLOATPTR_T);
-            }
-        }
+    // 访问函数声明，存储到全局作用域
+    auto *ret_type = SyntaxTreeTytoLLVMTy(node.ret_type);
+    std::vector<Type *> params{};
+    for (const auto &param : node.param_list->params) {
+        params.push_back(SyntaxTreeTytoLLVMTy(param->param_type,
+                                              !param->array_index.empty()));
     }
-    fun_type = FunctionType::get(ret_type, param_types);
-    auto fun = Function::create(fun_type, node.name, module.get());
-    scope.push(node.name, fun);
-    cur_fun = fun;
-    auto funBB = BasicBlock::create(module.get(), "entry", fun);
-    builder->set_insert_point(funBB);
-    cur_basic_block_list.push_back(funBB);
+    auto *FunTy = FunctionType::get(ret_type, params);
+    auto *Fun = Function::create(FunTy, node.name, module.get());
+    scope.push(node.name, Fun);
+
+    // 处理函数体
     scope.enter();
-    pre_enter_scope = true;
 
-    // ret BB
-    if (ret_type == INT32_T) {
-        ret_addr = builder->create_alloca(INT32_T);
-    } else if (ret_type == FLOAT_T) {
-        ret_addr = builder->create_alloca(FLOAT_T);
-    }
-    ret_BB = BasicBlock::create(module.get(), "ret", fun);
-
-    std::vector<Value *> args;
-    for (auto arg = fun->arg_begin(); arg != fun->arg_end(); arg++) {
-        args.push_back(*arg);
-    }
-    int param_num = func_params.size();
-    for (int i = 0; i < param_num; i++) {
-        if (func_params[i].array_index.empty()) {
-            Value *alloc;
-            if (func_params[i].param_type == SyntaxTree::Type::INT) {
-                alloc = builder->create_alloca(INT32_T);
-            } else if (func_params[i].param_type == SyntaxTree::Type::FLOAT) {
-                alloc = builder->create_alloca(FLOAT_T);
-            }
-            builder->create_store(args[i], alloc);
-            scope.push(func_params[i].name, alloc);
-        } else {
-            Value *alloc_array;
-            if (func_params[i].param_type == SyntaxTree::Type::INT) {
-                alloc_array = builder->create_alloca(INT32PTR_T);
-            } else if (func_params[i].param_type == SyntaxTree::Type::FLOAT) {
-                alloc_array = builder->create_alloca(FLOATPTR_T);
-            }
-            builder->create_store(args[i], alloc_array);
-            scope.push(func_params[i].name, alloc_array);
-        }
+    // 参数存储到函数内部作用域
+    // 要分配栈上空间，使得拥有左值
+    auto *entryBlock = BasicBlock::create(module.get(), "entry", Fun);
+    builder->set_insert_point(entryBlock);
+    auto arg = Fun->arg_begin();
+    auto arg_end = Fun->arg_end();
+    auto param = node.param_list->params.begin();
+    auto param_end = node.param_list->params.end();
+    while (arg != arg_end && param != param_end) {
+        auto name = (*param)->name;
+        auto *val = *arg;
+        auto *argAlloca = builder->create_alloca(val->get_type());
+        builder->create_store(val, argAlloca);
+        scope.push(name, argAlloca);
+        arg++, param++;
     }
 
-    node.body->accept(*this);
+    // 返回值
+    if (ret_type != VOID_T)
+        ret_addr = builder->create_alloca(ret_type);
 
-    if (builder->get_insert_block()->get_terminator() == nullptr) {
-        if (cur_fun->get_return_type()->is_void_type()) {
-            builder->create_br(ret_BB);
-        } else if (cur_fun->get_return_type()->is_integer_type()) {
-            builder->create_store(CONST_INT(0), ret_addr);
-            builder->create_br(ret_BB);
-        } else if (cur_fun->get_return_type()->is_float_type()) {
-            builder->create_store(CONST_FLOAT(0), ret_addr);
-            builder->create_br(ret_BB);
-        }
-    }
-    scope.exit();
-    cur_basic_block_list.pop_back();
-
-    // ret BB
+    ret_BB = BasicBlock::create(module.get(), "ret", Fun);
     builder->set_insert_point(ret_BB);
-    if (fun->get_return_type() == VOID_T) {
+    if (ret_type == VOID_T) {
         builder->create_void_ret();
     } else {
-        auto ret_val = builder->create_load(ret_addr);
+        auto *ret_val = builder->create_load(ret_addr);
         builder->create_ret(ret_val);
     }
-}
+    builder->set_insert_point(entryBlock);
 
-void IRBuilder::visit(SyntaxTree::FuncFParamList &node) {
-    for (const auto &Param : node.params) {
-        Param->accept(*this);
+    // 访问函数体，翻译
+    for (const auto &stmt : node.body->body) {
+        stmt->accept(*this);
+        if (builder->get_insert_block()->get_terminator() != nullptr)
+            break;
     }
-}
 
-void IRBuilder::visit(SyntaxTree::FuncParam &node) {
-    func_params.push_back(node);
+    // 可能省略了返回语句
+    if (builder->get_insert_block()->get_terminator() == nullptr) {
+        if (ret_type == INT32_T) {
+            builder->create_store(CONST_INT(0), ret_addr);
+        } else if (ret_type == FLOAT_T) {
+            builder->create_store(CONST_FLOAT(0), ret_addr);
+        }
+        builder->create_br(ret_BB);
+    }
+
+    scope.exit();
 }
 
 void IRBuilder::visit(SyntaxTree::VarDef &node) {
-    // Type *var_type;
-    if (node.btype == SyntaxTree::Type::INT) {
-        var_type = INT32_T;
-    } else if (node.btype == SyntaxTree::Type::FLOAT) {
-        var_type = FLOAT_T;
+    // 计算类型（变量 or 数组）
+    auto *element_type = baseTypetoLLVMTy(node.btype);
+    auto *type = element_type;
+    auto is_array = !node.array_length.empty();
+    if (is_array) {
+        node.array_length[0]->accept(*this);
+        auto *const_int = dynamic_cast<ConstantInt *>(prev_expr);
+        type = Type::get_array_type(type, const_int->get_value());
     }
-    BasicBlock *cur_fun_entry_block;
-    BasicBlock *cur_fun_cur_block;
-    if (scope.in_global() == false) {
-        cur_fun_entry_block = cur_fun->get_entry_block(); // entry block
-        cur_fun_cur_block = cur_basic_block_list.back();  // current block
-    }
-    if (node.is_constant) {
-        // constant
-        Value *var;
-        if (node.array_length.empty()) {
-            node.initializers->accept(*this);
-            if (var_type == INT32_T) {
-                if (dynamic_cast<ConstantFloat *>(tmp_val)) {
-                    tmp_val = CONST_INT(int(
-                        dynamic_cast<ConstantFloat *>(tmp_val)->get_value()));
-                }
-                auto initializer =
-                    dynamic_cast<ConstantInt *>(tmp_val)->get_value();
-                var = ConstantInt::get(initializer, module.get());
-            } else if (var_type == FLOAT_T) {
-                if (dynamic_cast<ConstantInt *>(tmp_val)) {
-                    tmp_val = CONST_FLOAT(float(
-                        dynamic_cast<ConstantInt *>(tmp_val)->get_value()));
-                }
-                auto initializer =
-                    dynamic_cast<ConstantFloat *>(tmp_val)->get_value();
-                var = ConstantFloat::get(initializer, module.get());
+
+    // 申请空间 或 常量
+    Value *alloca;
+    if (scope.in_global()) {
+        // 全局，特例是零初始化
+        // 剩余变量都是有初始化值的，分为数组初始化和变量初始化讨论
+        if (!node.is_inited ||
+            (is_array && node.initializers->elementList.empty())) {
+            // 0 初始化
+            auto *zero_initializer = ConstantZero::get(type, module.get());
+            alloca = GlobalVariable::create(node.name, module.get(), type,
+                                            false, zero_initializer);
+        } else if (is_array) {
+            // 已初始化的全局数组
+            std::vector<Constant *> initializer_values;
+            for (const auto &val : node.initializers->elementList) {
+                val->accept(*this);
+                typeConvert(element_type);
+                initializer_values.push_back(
+                    dynamic_cast<Constant *>(prev_expr));
             }
-            scope.push(node.name, var);
+            auto array_length =
+                static_cast<ArrayType *>(type)->get_num_of_elements() -
+                static_cast<int>(initializer_values.size());
+            auto *const_zero = CONST_INT(0);
+            for (auto i = 0U; i < array_length; i++) {
+                prev_expr = const_zero;
+                typeConvert(element_type);
+                initializer_values.push_back(
+                    dynamic_cast<Constant *>(prev_expr));
+            }
+            auto *initializer = ConstantArray::get(
+                static_cast<ArrayType *>(type), initializer_values);
+            alloca = GlobalVariable::create(node.name, module.get(), type,
+                                            node.is_constant, initializer);
         } else {
-            // simple ver
-            int length;
-            for (auto length_expr : node.array_length) {
-                length_expr->accept(*this);
-                auto length_const = dynamic_cast<ConstantInt *>(tmp_val);
-                length = length_const->get_value();
-            }
-            auto *array_type = ArrayType::get(var_type, length);
-            init_val.clear();
-            node.initializers->accept(*this);
-            if (scope.in_global()) {
-                int cur_size = init_val.size();
-                while (cur_size < length) {
-                    if (var_type == INT32_T) {
-                        init_val.push_back(CONST_INT(0));
-                    } else if (var_type == FLOAT_T) {
-                        init_val.push_back(CONST_FLOAT(0));
-                    }
-                    cur_size++;
-                }
-                auto initializer = ConstantArray::get(array_type, init_val);
-                var = GlobalVariable::create(node.name, module.get(),
-                                             array_type, true, initializer);
-                scope.push(node.name, var);
+            // 变量初始化
+            if (node.is_constant) {
+                // 全局常量，用 const 替换
+                node.initializers->expr->accept(*this);
+                typeConvert(element_type);
+                alloca = prev_expr;
             } else {
-                auto tmp_terminator = cur_fun_entry_block->get_terminator();
-                if (tmp_terminator != nullptr) {
-                    cur_fun_entry_block->get_instructions().pop_back();
-                }
-                var = builder->create_alloca(array_type);
-                cur_fun_cur_block->get_instructions().pop_back();
-                cur_fun_entry_block->add_instruction(
-                    dynamic_cast<Instruction *>(var));
-                dynamic_cast<Instruction *>(var)->set_parent(
-                    cur_fun_entry_block);
-                if (tmp_terminator != nullptr) {
-                    cur_fun_entry_block->add_instruction(tmp_terminator);
-                }
-                int pos = 0;
-                for (auto init : init_val) {
-                    builder->create_store(
-                        init, builder->create_gep(
-                                  var, {CONST_INT(0), CONST_INT(pos)}));
-                    pos++;
-                }
-                while (pos < length) {
-                    if (var_type == INT32_T) {
-                        builder->create_store(
-                            CONST_INT(0),
-                            builder->create_gep(
-                                var, {CONST_INT(0), CONST_INT(pos)}));
-                    } else if (var_type == FLOAT_T) {
-                        builder->create_store(
-                            CONST_FLOAT(0),
-                            builder->create_gep(
-                                var, {CONST_INT(0), CONST_INT(pos)}));
-                    }
-                    pos++;
-                }
-                scope.push(node.name, var);
-                // add a const global array as llvm
-                int cur_size = init_val.size();
-                while (cur_size < length) {
-                    if (var_type == INT32_T) {
-                        init_val.push_back(CONST_INT(0));
-                    } else if (var_type == FLOAT_T) {
-                        init_val.push_back(CONST_FLOAT(0));
-                    }
-                    cur_size++;
-                }
-                auto initializer = ConstantArray::get(array_type, init_val);
-                std::string const_name =
-                    "__const." + cur_fun->get_name() + "." + node.name;
-                std::string const_num = "";
-                int suffix = 0;
-                while (scope.find(const_name + const_num, false) != nullptr) {
-                    suffix++;
-                    const_num = "." + std::to_string(suffix);
-                }
-                auto const_var =
-                    GlobalVariable::create(const_name + const_num, module.get(),
-                                           array_type, true, initializer);
-                scope.push(const_name + const_num, const_var);
-                local2global[var] = const_var;
+                // 正常分配
+                node.initializers->expr->accept(*this);
+                typeConvert(element_type);
+                auto *const_expr = dynamic_cast<Constant *>(prev_expr);
+                alloca = GlobalVariable::create(node.name, module.get(), type,
+                                                false, const_expr);
             }
         }
+    } else if (node.is_constant && !is_array) {
+        // 局部常量初始化，用 const 替换
+        node.initializers->expr->accept(*this);
+        typeConvert(element_type);
+        alloca = prev_expr;
     } else {
-        if (node.array_length.empty()) {
-            Value *var;
-            if (scope.in_global()) {
-                if (node.is_inited) {
-                    node.initializers->accept(*this);
-                    Constant *initializer;
-                    if (var_type == INT32_T) {
-                        if (dynamic_cast<ConstantFloat *>(tmp_val)) {
-                            tmp_val = CONST_INT(
-                                int(dynamic_cast<ConstantFloat *>(tmp_val)
-                                        ->get_value()));
-                        }
-                        initializer = dynamic_cast<ConstantInt *>(tmp_val);
-                    } else if (var_type == FLOAT_T) {
-                        if (dynamic_cast<ConstantInt *>(tmp_val)) {
-                            tmp_val = CONST_FLOAT(
-                                float(dynamic_cast<ConstantInt *>(tmp_val)
-                                          ->get_value()));
-                        }
-                        initializer = dynamic_cast<ConstantFloat *>(tmp_val);
-                    }
-                    var = GlobalVariable::create(node.name, module.get(),
-                                                 var_type, false, initializer);
-                    scope.push(node.name, var);
-                } else {
-                    auto initializer =
-                        ConstantZero::get(var_type, module.get());
-                    var = GlobalVariable::create(node.name, module.get(),
-                                                 var_type, false, initializer);
-                    scope.push(node.name, var);
-                }
-            } else {
-                auto tmp_terminator = cur_fun_entry_block->get_terminator();
-                if (tmp_terminator != nullptr) {
-                    cur_fun_entry_block->get_instructions().pop_back();
-                }
-                var = builder->create_alloca(var_type);
-                cur_fun_cur_block->get_instructions().pop_back();
-                cur_fun_entry_block->add_instruction(
-                    dynamic_cast<Instruction *>(var));
-                dynamic_cast<Instruction *>(var)->set_parent(
-                    cur_fun_entry_block);
-                if (tmp_terminator != nullptr) {
-                    cur_fun_entry_block->add_instruction(tmp_terminator);
-                }
-                if (node.is_inited) {
-                    node.initializers->accept(*this);
-                    if (var->get_type()
-                            ->get_pointer_element_type()
-                            ->is_integer_type() &&
-                        tmp_val->get_type()->is_float_type()) {
-                        tmp_val = builder->create_fptosi(tmp_val, INT32_T);
-                    } else if (var->get_type()
-                                   ->get_pointer_element_type()
-                                   ->is_float_type() &&
-                               tmp_val->get_type()->is_integer_type()) {
-                        tmp_val = builder->create_sitofp(tmp_val, FLOAT_T);
-                    }
-                    builder->create_store(tmp_val, var);
-                }
-                scope.push(node.name, var);
-            }
-        } else {
-            // simple ver
-            int length;
-            for (auto length_expr : node.array_length) {
-                length_expr->accept(*this);
-                auto length_const = dynamic_cast<ConstantInt *>(tmp_val);
-                length = length_const->get_value();
-            }
-            auto *array_type = ArrayType::get(var_type, length);
-            Value *var;
-            if (scope.in_global()) {
-                if (node.is_inited) {
-                    init_val.clear();
-                    node.initializers->accept(*this);
-                    int cur_size = init_val.size();
-                    while (cur_size < length) {
-                        if (var_type == INT32_T) {
-                            init_val.push_back(CONST_INT(0));
-                        } else if (var_type == FLOAT_T) {
-                            init_val.push_back(CONST_FLOAT(0));
-                        }
-                        cur_size++;
-                    }
-                    auto initializer = ConstantArray::get(array_type, init_val);
-                    var =
-                        GlobalVariable::create(node.name, module.get(),
-                                               array_type, false, initializer);
-                    scope.push(node.name, var);
-                } else {
-                    auto initializer =
-                        ConstantZero::get(array_type, module.get());
-                    var =
-                        GlobalVariable::create(node.name, module.get(),
-                                               array_type, false, initializer);
-                    scope.push(node.name, var);
-                }
-            } else {
-                auto tmp_terminator = cur_fun_entry_block->get_terminator();
-                if (tmp_terminator != nullptr) {
-                    cur_fun_entry_block->get_instructions().pop_back();
-                }
-                var = builder->create_alloca(array_type);
-                cur_fun_cur_block->get_instructions().pop_back();
-                cur_fun_entry_block->add_instruction(
-                    dynamic_cast<Instruction *>(var));
-                dynamic_cast<Instruction *>(var)->set_parent(
-                    cur_fun_entry_block);
-                if (tmp_terminator != nullptr) {
-                    cur_fun_entry_block->add_instruction(tmp_terminator);
-                }
-                if (node.is_inited) {
-                    init_val.clear();
-                    node.initializers->accept(*this);
-                    int pos = 0;
-                    for (auto init : init_val) {
-                        builder->create_store(
-                            init, builder->create_gep(
-                                      var, {CONST_INT(0), CONST_INT(pos)}));
-                        pos++;
-                    }
-                    while (pos < length) {
-                        if (var_type == INT32_T) {
-                            builder->create_store(
-                                CONST_INT(0),
-                                builder->create_gep(
-                                    var, {CONST_INT(0), CONST_INT(pos)}));
-                        } else if (var_type == FLOAT_T) {
-                            builder->create_store(
-                                CONST_FLOAT(0),
-                                builder->create_gep(
-                                    var, {CONST_INT(0), CONST_INT(pos)}));
-                        }
-                        pos++;
-                    }
-                }
-                scope.push(node.name, var);
-            }
-        }
+        // 其他局部变量
+        // 统一在最开始的基本块分配变量，防止循环造成的内存泄漏
+        auto *entryBB =
+            builder->get_insert_block()->get_parent()->get_entry_block();
+        alloca = AllocaInst::create_alloca(type, entryBB);
+        entryBB->get_instructions().pop_back();
+        entryBB->add_instr_begin(static_cast<Instruction *>(alloca));
     }
+
+    // 保存到符号表
+    scope.push(node.name, alloca);
+
+    // 处理局部变量初始化
+    if (scope.in_global() || !node.is_inited) {
+        return;
+    }
+    if (!is_array) {
+        node.initializers->expr->accept(*this);
+        typeConvert(element_type);
+        builder->create_store(prev_expr, alloca);
+        return;
+    }
+    if (!node.is_inited)
+        return;
+    auto array_size = static_cast<ArrayType *>(type)->get_num_of_elements();
+    auto inited_size = static_cast<int>(node.initializers->elementList.size());
+    // 已知初始化值的
+    for (auto i = 0; i < inited_size; i++) {
+        node.initializers->elementList[i]->accept(*this);
+        typeConvert(element_type);
+        auto *ptr = builder->create_gep(alloca, {CONST_INT(0), CONST_INT(i)});
+        builder->create_store(prev_expr, ptr);
+    }
+    // 其余 0 填充
+    auto *const_zero = CONST_INT(0);
+    for (auto i = inited_size; i < static_cast<int>(array_size); i++) {
+        prev_expr = const_zero;
+        typeConvert(element_type);
+        auto *ptr = builder->create_gep(alloca, {CONST_INT(0), CONST_INT(i)});
+        builder->create_store(prev_expr, ptr);
+    }
+}
+
+void IRBuilder::visit(SyntaxTree::InitVal &node) { node.expr->accept(*this); }
+
+void IRBuilder::visit(SyntaxTree::LVal &node) {
+    // 变量，实际不一定具有左值（const 常量）
+    // const 常量返回值，否则返回地址
+    // 首先获取变量（地址）
+    auto name = node.name;
+    auto *ptr = scope.find(name, false);
+
+    // 对变量名的访问
+    if (node.array_index.empty()) {
+        if (ptr->get_type()->is_pointer_type() &&
+            ptr->get_type()->get_pointer_element_type()->is_array_type()) {
+            // 如果是数组，需要解下第一维，转换成指针
+            prev_expr = builder->create_gep(ptr, {CONST_INT(0), CONST_INT(0)});
+        } else {
+            prev_expr = ptr;
+        }
+        return;
+    }
+
+    // 对数组的访问，应该都有左值 ptr
+    std::vector<Value *> indexes{};
+    bool index_all_const = true;
+    // int a[2][3] 相比 int a[][3]，a 多了一个维度，需要补 0
+    if (ptr->get_type()->get_pointer_element_type()->is_array_type()) {
+        indexes.push_back(CONST_INT(0));
+    } else {
+        ptr = builder->create_load(ptr);
+    }
+    for (const auto &index : node.array_index) {
+        index->accept(*this);
+        auto *const_index = dynamic_cast<ConstantInt *>(prev_expr);
+        if (const_index == nullptr) {
+            index_all_const = false;
+        }
+        typeConvert(INT32_T);
+        indexes.push_back(prev_expr);
+    }
+
+    // 如果数组是 const，下标也是 const，直接返回 Constant*
+    auto *ptr_global = dynamic_cast<GlobalVariable *>(ptr);
+    if (ptr_global != nullptr && ptr_global->is_const() && index_all_const) {
+        auto *initArray = dynamic_cast<ConstantArray *>(ptr_global->get_init());
+        for (auto &iter = ++indexes.begin(); iter != indexes.end(); iter++) {
+            prev_expr = initArray->get_element_value(
+                dynamic_cast<ConstantInt *>(*iter)->get_value());
+        }
+        return;
+    }
+
+    // 否则生成 gep
+    prev_expr = builder->create_gep(ptr, indexes);
 }
 
 void IRBuilder::visit(SyntaxTree::AssignStmt &node) {
-    node.value->accept(*this);
-    auto result = tmp_val;
-    require_lvalue = true;
     node.target->accept(*this);
-    auto addr = tmp_val;
-    if (addr->get_type()->get_pointer_element_type()->is_integer_type() &&
-        result->get_type()->is_float_type()) {
-        result = builder->create_fptosi(result, INT32_T);
-    } else if (addr->get_type()->get_pointer_element_type()->is_float_type() &&
-               result->get_type()->is_integer_type()) {
-        result = builder->create_sitofp(result, FLOAT_T);
-    }
-    builder->create_store(result, addr);
-    tmp_val = result;
-}
-
-void IRBuilder::visit(SyntaxTree::LVal &node) {
-    auto var = scope.find(node.name, false);
-    bool should_return_lvalue = require_lvalue;
-    require_lvalue = false;
-    if (node.array_index.empty()) {
-        if (should_return_lvalue) {
-            if (var->get_type()->get_pointer_element_type()->is_array_type()) {
-                tmp_val =
-                    builder->create_gep(var, {CONST_INT(0), CONST_INT(0)});
-            } else if (var->get_type()
-                           ->get_pointer_element_type()
-                           ->is_pointer_type()) {
-                tmp_val = builder->create_load(var);
-            } else {
-                tmp_val = var;
-            }
-            require_lvalue = false;
-        } else {
-            auto val_const_int = dynamic_cast<ConstantInt *>(var);
-            auto val_const_float = dynamic_cast<ConstantFloat *>(var);
-            if (val_const_int != nullptr) {
-                tmp_val = val_const_int;
-            } else if (val_const_float != nullptr) {
-                tmp_val = val_const_float;
-            } else {
-                tmp_val = builder->create_load(var);
-            }
-        }
-    } else {
-        // simple ver
-        node.array_index[0]->accept(*this);
-        auto index = tmp_val;
-        auto const_index = dynamic_cast<ConstantInt *>(index);
-        if (const_index != nullptr) {
-            // global const array
-            auto global_var = dynamic_cast<GlobalVariable *>(var);
-            if (global_var != nullptr) {
-                if (global_var->is_const()) {
-                    auto init = global_var->get_init();
-                    auto init_array = dynamic_cast<ConstantArray *>(init);
-                    auto index_value = const_index->get_value();
-                    tmp_val = init_array->get_element_value(index_value);
-                    return;
-                }
-            }
-            // local const array
-            auto const_var = local2global[var];
-            if (const_var != nullptr) {
-                auto global_const_var =
-                    dynamic_cast<GlobalVariable *>(const_var);
-                if (global_const_var != nullptr) {
-                    if (global_const_var->is_const()) {
-                        auto init = global_const_var->get_init();
-                        auto init_array = dynamic_cast<ConstantArray *>(init);
-                        auto index_value = const_index->get_value();
-                        tmp_val = init_array->get_element_value(index_value);
-                        return;
-                    }
-                }
-            }
-        }
-        Value *tmp_ptr;
-        if (var->get_type()->get_pointer_element_type()->is_pointer_type()) {
-            auto tmp_load = builder->create_load(var);
-            tmp_ptr = builder->create_gep(tmp_load, {index});
-        } else {
-            tmp_ptr = builder->create_gep(var, {CONST_INT(0), index});
-        }
-        if (should_return_lvalue) {
-            tmp_val = tmp_ptr;
-            require_lvalue = false;
-        } else {
-            tmp_val = builder->create_load(tmp_ptr);
-        }
-    }
+    auto *ptr = prev_expr;
+    node.value->accept(*this);
+    typeConvert(ptr->get_type()->get_pointer_element_type());
+    auto *value = prev_expr;
+    builder->create_store(value, ptr);
 }
 
 void IRBuilder::visit(SyntaxTree::Literal &node) {
-    if (node.literal_type == SyntaxTree::Type::INT) {
-        tmp_val = CONST_INT(node.int_const);
-    } else if (node.literal_type == SyntaxTree::Type::FLOAT) {
-        tmp_val = CONST_FLOAT(node.float_const);
+    if (node.literal_type == SyntaxTree::Type::FLOAT) {
+        prev_expr = CONST_FLOAT(node.float_const);
+    } else if (node.literal_type == SyntaxTree::Type::INT) {
+        prev_expr = CONST_INT(node.int_const);
     }
 }
 
 void IRBuilder::visit(SyntaxTree::ReturnStmt &node) {
-    if (node.ret == nullptr) {
-        builder->create_br(ret_BB);
-    } else {
+    if (node.ret) {
         node.ret->accept(*this);
-        if (ret_addr->get_type()
-                ->get_pointer_element_type()
-                ->is_integer_type() &&
-            tmp_val->get_type()->is_float_type()) {
-            tmp_val = builder->create_fptosi(tmp_val, INT32_T);
-        } else if (ret_addr->get_type()
-                       ->get_pointer_element_type()
-                       ->is_float_type() &&
-                   tmp_val->get_type()->is_integer_type()) {
-            tmp_val = builder->create_sitofp(tmp_val, FLOAT_T);
-        }
-        builder->create_store(tmp_val, ret_addr);
-        builder->create_br(ret_BB);
+        auto *expected_type =
+            builder->get_insert_block()->get_parent()->get_return_type();
+        typeConvert(expected_type);
+        builder->create_store(prev_expr, ret_addr);
     }
+    builder->create_br(ret_BB);
 }
 
 void IRBuilder::visit(SyntaxTree::BlockStmt &node) {
-    bool need_exit_scope = !pre_enter_scope;
-    if (pre_enter_scope) {
-        pre_enter_scope = false;
-    } else {
-        scope.enter();
-    }
-    for (auto &decl : node.body) {
-        decl->accept(*this);
+    scope.enter();
+    for (const auto &stmt : node.body) {
+        stmt->accept(*this);
         if (builder->get_insert_block()->get_terminator() != nullptr)
             break;
     }
-    if (need_exit_scope) {
-        scope.exit();
-    }
+    scope.exit();
 }
-
-void IRBuilder::visit(SyntaxTree::EmptyStmt &node) { tmp_val = nullptr; }
 
 void IRBuilder::visit(SyntaxTree::ExprStmt &node) { node.exp->accept(*this); }
 
 void IRBuilder::visit(SyntaxTree::UnaryCondExpr &node) {
-    if (node.op == SyntaxTree::UnaryCondOp::NOT) {
-        node.rhs->accept(*this);
-        auto r_val = tmp_val;
-        if (r_val->get_type()->is_integer_type()) {
-            tmp_val = builder->create_icmp_eq(r_val, CONST_INT(0));
-        } else if (r_val->get_type()->is_float_type()) {
-            tmp_val = builder->create_fcmp_eq(r_val, CONST_FLOAT(0));
-        }
-        tmp_val = builder->create_zext(tmp_val, INT32_T);
+    // 文法上，这个后面只能跟一元算数表达式，无法跟随条件表达式
+    // 也就是 !(a == 0) 其实是不合法的。。。
+    // 所以这里可以看成是：“计算”，最后输出还是 32 位 INT
+    node.rhs->accept(*this);
+    typeConvert(INT1_T);
+    auto *const_int = dynamic_cast<ConstantInt *>(prev_expr);
+    if (const_int != nullptr) {
+        prev_expr = CONST_INT(const_int->get_value() == 0 ? 1 : 0);
+        return;
     }
-}
-
-void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
-    Value *cond_val;
-    Value *f_cond_val;
-    if (node.op == SyntaxTree::BinaryCondOp::LAND) {
-        auto *trueBB = BasicBlock::create(module.get(), "", cur_fun);
-        IF_While_And_Cond_Stack.push_back(
-            {trueBB, IF_While_Or_Cond_Stack.back().falseBB});
-        node.lhs->accept(*this);
-        IF_While_And_Cond_Stack.pop_back();
-        cond_val = dynamic_cast<CmpInst *>(tmp_val);
-        f_cond_val = dynamic_cast<FCmpInst *>(tmp_val);
-        if (tmp_val->get_type()->is_integer_type() || cond_val != nullptr) {
-            if (cond_val == nullptr) {
-                auto *inst = dynamic_cast<Instruction *>(tmp_val);
-                if (inst != nullptr && inst->is_zext())
-                    cond_val = inst->get_operand(0);
-                else
-                    cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
-            }
-            builder->create_cond_br(cond_val, trueBB,
-                                    IF_While_Or_Cond_Stack.back().falseBB);
-        } else if (tmp_val->get_type()->is_float_type() ||
-                   f_cond_val != nullptr) {
-            if (f_cond_val == nullptr) {
-                f_cond_val = builder->create_fcmp_ne(tmp_val, CONST_FLOAT(0));
-            }
-            builder->create_cond_br(f_cond_val, trueBB,
-                                    IF_While_Or_Cond_Stack.back().falseBB);
-        }
-        builder->set_insert_point(trueBB);
-        node.rhs->accept(*this);
-    } else if (node.op == SyntaxTree::BinaryCondOp::LOR) {
-        auto *falseBB = BasicBlock::create(module.get(), "", cur_fun);
-        IF_While_Or_Cond_Stack.push_back(
-            {IF_While_Or_Cond_Stack.back().trueBB, falseBB});
-        node.lhs->accept(*this);
-        IF_While_Or_Cond_Stack.pop_back();
-        cond_val = dynamic_cast<CmpInst *>(tmp_val);
-        f_cond_val = dynamic_cast<FCmpInst *>(tmp_val);
-        if (tmp_val->get_type()->is_integer_type() || cond_val != nullptr) {
-            if (cond_val == nullptr) {
-                auto *inst = dynamic_cast<Instruction *>(tmp_val);
-                if (inst != nullptr && inst->is_zext())
-                    cond_val = inst->get_operand(0);
-                else
-                    cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
-            }
-            builder->create_cond_br(
-                cond_val, IF_While_Or_Cond_Stack.back().trueBB, falseBB);
-        } else if (tmp_val->get_type()->is_float_type() ||
-                   f_cond_val != nullptr) {
-            if (f_cond_val == nullptr) {
-                f_cond_val = builder->create_fcmp_ne(tmp_val, CONST_FLOAT(0));
-            }
-            builder->create_cond_br(
-                f_cond_val, IF_While_Or_Cond_Stack.back().trueBB, falseBB);
-        }
-        builder->set_insert_point(falseBB);
-        node.rhs->accept(*this);
-    } else {
-        node.lhs->accept(*this);
-        auto l_val = tmp_val;
-        node.rhs->accept(*this);
-        auto r_val = tmp_val;
-        bool both_int = match_type(builder, &l_val, &r_val);
-        Value *cmp;
-        switch (node.op) {
-        case SyntaxTree::BinaryCondOp::LT:
-            if (both_int) {
-                cmp = builder->create_icmp_lt(l_val, r_val);
-            } else {
-                cmp = builder->create_fcmp_lt(l_val, r_val);
-            }
-            break;
-        case SyntaxTree::BinaryCondOp::LTE:
-            if (both_int) {
-                cmp = builder->create_icmp_le(l_val, r_val);
-            } else {
-                cmp = builder->create_fcmp_le(l_val, r_val);
-            }
-            break;
-        case SyntaxTree::BinaryCondOp::GTE:
-            if (both_int) {
-                cmp = builder->create_icmp_ge(l_val, r_val);
-            } else {
-                cmp = builder->create_fcmp_ge(l_val, r_val);
-            }
-            break;
-        case SyntaxTree::BinaryCondOp::GT:
-            if (both_int) {
-                cmp = builder->create_icmp_gt(l_val, r_val);
-            } else {
-                cmp = builder->create_fcmp_gt(l_val, r_val);
-            }
-            break;
-        case SyntaxTree::BinaryCondOp::EQ:
-            if (both_int) {
-                cmp = builder->create_icmp_eq(l_val, r_val);
-            } else {
-                cmp = builder->create_fcmp_eq(l_val, r_val);
-            }
-            break;
-        case SyntaxTree::BinaryCondOp::NEQ:
-            if (both_int) {
-                cmp = builder->create_icmp_ne(l_val, r_val);
-            } else {
-                cmp = builder->create_fcmp_ne(l_val, r_val);
-            }
-            break;
-        default:
-            break;
-        }
-        tmp_val = builder->create_zext(cmp, INT32_T);
-    }
+    prev_expr = builder->create_zext(prev_expr, INT32_T);
+    prev_expr = builder->create_icmp_eq(prev_expr, CONST_INT(0));
+    prev_expr = builder->create_zext(prev_expr, INT32_T);
 }
 
 void IRBuilder::visit(SyntaxTree::BinaryExpr &node) {
-    if (node.rhs == nullptr) {
-        node.lhs->accept(*this);
-    } else {
-        node.lhs->accept(*this);
-        auto l_val_const_i = dynamic_cast<ConstantInt *>(tmp_val);
-        auto l_val_const_f = dynamic_cast<ConstantFloat *>(tmp_val);
-        auto l_val = tmp_val;
-        node.rhs->accept(*this);
-        auto r_val_const_i = dynamic_cast<ConstantInt *>(tmp_val);
-        auto r_val_const_f = dynamic_cast<ConstantFloat *>(tmp_val);
-        auto r_val = tmp_val;
-        bool both_const =
-            ((l_val_const_i != nullptr || l_val_const_f != nullptr) &&
-             (r_val_const_i != nullptr || r_val_const_f != nullptr));
-        if (both_const) {
-            bool both_int =
-                (l_val_const_i != nullptr && r_val_const_i != nullptr);
-            bool both_float =
-                (l_val_const_f != nullptr && r_val_const_f != nullptr);
-            int l_val_const_int, r_val_const_int;
-            float l_val_const_float, r_val_const_float;
-            if (both_int) {
-                l_val_const_int = l_val_const_i->get_value();
-                r_val_const_int = r_val_const_i->get_value();
-            } else if (both_float) {
-                l_val_const_float = l_val_const_f->get_value();
-                r_val_const_float = r_val_const_f->get_value();
-            } else {
-                if (l_val_const_i == nullptr) {
-                    l_val_const_float = l_val_const_f->get_value();
-                    r_val_const_float = float(r_val_const_i->get_value());
-                } else if (r_val_const_i == nullptr) {
-                    l_val_const_float = float(l_val_const_i->get_value());
-                    r_val_const_float = r_val_const_f->get_value();
-                }
-            }
-            switch (node.op) {
-            case SyntaxTree::BinOp::PLUS:
-                if (both_int) {
-                    tmp_val = CONST_INT(l_val_const_int + r_val_const_int);
-                } else {
-                    tmp_val =
-                        CONST_FLOAT(l_val_const_float + r_val_const_float);
-                }
-                break;
-            case SyntaxTree::BinOp::MINUS:
-                if (both_int) {
-                    tmp_val = CONST_INT(l_val_const_int - r_val_const_int);
-                } else {
-                    tmp_val =
-                        CONST_FLOAT(l_val_const_float - r_val_const_float);
-                }
-                break;
-            case SyntaxTree::BinOp::MULTIPLY:
-                if (both_int) {
-                    tmp_val = CONST_INT(l_val_const_int * r_val_const_int);
-                } else {
-                    tmp_val =
-                        CONST_FLOAT(l_val_const_float * r_val_const_float);
-                }
-                break;
-            case SyntaxTree::BinOp::DIVIDE:
-                if (both_int) {
-                    tmp_val = CONST_INT(l_val_const_int / r_val_const_int);
-                } else {
-                    tmp_val =
-                        CONST_FLOAT(l_val_const_float / r_val_const_float);
-                }
-                break;
-            case SyntaxTree::BinOp::MODULO:
-                if (both_int) {
-                    tmp_val = CONST_INT(l_val_const_int % r_val_const_int);
-                } else {
-                    std::cerr << "invalid operands" << std::endl;
-                    exit(-1);
-                }
-                break;
-            }
-        } else {
-            bool both_int = match_type(builder, &l_val, &r_val);
-            switch (node.op) {
-            case SyntaxTree::BinOp::PLUS:
-                if (both_int) {
-                    tmp_val = builder->create_iadd(l_val, r_val);
-                } else {
-                    tmp_val = builder->create_fadd(l_val, r_val);
-                }
-                break;
-            case SyntaxTree::BinOp::MINUS:
-                if (both_int) {
-                    tmp_val = builder->create_isub(l_val, r_val);
-                } else {
-                    tmp_val = builder->create_fsub(l_val, r_val);
-                }
-                break;
-            case SyntaxTree::BinOp::MULTIPLY:
-                if (both_int) {
-                    tmp_val = builder->create_imul(l_val, r_val);
-                } else {
-                    tmp_val = builder->create_fmul(l_val, r_val);
-                }
-                break;
-            case SyntaxTree::BinOp::DIVIDE:
-                if (both_int) {
-                    tmp_val = builder->create_isdiv(l_val, r_val);
-                } else {
-                    tmp_val = builder->create_fdiv(l_val, r_val);
-                }
-                break;
-            case SyntaxTree::BinOp::MODULO:
-                if (both_int) {
-                    tmp_val = builder->create_isrem(l_val, r_val);
-                } else {
-                    std::cerr << "invalid operands" << std::endl;
-                    exit(-1);
-                }
-                break;
-            }
-        }
-    }
+    node.lhs->accept(*this);
+    auto *lhs = prev_expr;
+    node.rhs->accept(*this);
+    auto *rhs = prev_expr;
+    binOpGen(lhs, rhs, BinOp(node.op));
 }
 
 void IRBuilder::visit(SyntaxTree::UnaryExpr &node) {
     node.rhs->accept(*this);
-    if (node.op == SyntaxTree::UnaryOp::MINUS) {
-        auto val_const_i = dynamic_cast<ConstantInt *>(tmp_val);
-        auto val_const_f = dynamic_cast<ConstantFloat *>(tmp_val);
-        auto r_val = tmp_val;
-        if (val_const_i != nullptr) {
-            tmp_val = CONST_INT(0 - val_const_i->get_value());
-        } else if (val_const_f != nullptr) {
-            tmp_val = CONST_FLOAT(0 - val_const_f->get_value());
-        } else {
-            if (r_val->get_type()->is_integer_type()) {
-                tmp_val = builder->create_isub(CONST_INT(0), r_val);
-            } else if (r_val->get_type()->is_float_type()) {
-                tmp_val = builder->create_fsub(CONST_FLOAT(0), r_val);
-            }
-        }
+    if (node.op == SyntaxTree::UnaryOp::PLUS) {
+        return;
+    }
+    auto *const_int = dynamic_cast<ConstantInt *>(prev_expr);
+    auto *const_float = dynamic_cast<ConstantFloat *>(prev_expr);
+    if (const_int != nullptr) {
+        prev_expr = CONST_INT(-const_int->get_value());
+    } else if (const_float != nullptr) {
+        prev_expr = CONST_FLOAT(-const_float->get_value());
+    } else {
+        binOpGen(CONST_INT(0), prev_expr, BinOp(SyntaxTree::BinOp::MINUS));
     }
 }
 
 void IRBuilder::visit(SyntaxTree::FuncCallStmt &node) {
-    auto fun = dynamic_cast<Function *>(scope.find(node.name, true));
-    std::vector<Value *> params;
-    int i = 0;
-    for (auto &param : node.params) {
-        auto param_type = fun->get_function_type()->get_param_type(i++);
-        if (param_type->is_integer_type() || param_type->is_float_type()) {
-            require_lvalue = false;
-        } else {
-            require_lvalue = true;
-        }
-        param->accept(*this);
-        require_lvalue = false;
-        if (param_type->is_float_type() &&
-            tmp_val->get_type()->is_integer_type()) {
-            auto const_tmp_val_i = dynamic_cast<ConstantInt *>(tmp_val);
-            if (const_tmp_val_i != nullptr) {
-                tmp_val = CONST_FLOAT(float(const_tmp_val_i->get_value()));
-            } else {
-                tmp_val = builder->create_sitofp(tmp_val, FLOAT_T);
-            }
-        } else if (param_type->is_integer_type() &&
-                   tmp_val->get_type()->is_float_type()) {
-            auto const_tmp_val_f = dynamic_cast<ConstantFloat *>(tmp_val);
-            if (const_tmp_val_f != nullptr) {
-                tmp_val = CONST_INT(int(const_tmp_val_f->get_value()));
-            } else {
-                tmp_val = builder->create_fptosi(tmp_val, INT32_T);
-            }
-        }
-        params.push_back(tmp_val);
+    auto name = node.name;
+    std::vector<Value *> arguments{};
+    auto param = node.params.begin();
+    auto param_end = node.params.end();
+    auto *Fun = dynamic_cast<Function *>(scope.find(name, true));
+    auto arg = Fun->arg_begin();
+    auto arg_end = Fun->arg_end();
+    while (arg != arg_end && param != param_end) {
+        (*param)->accept(*this);
+        typeConvert((*arg)->get_type());
+        arguments.push_back(prev_expr);
+        arg++, param++;
     }
-    tmp_val = builder->create_call(fun, params);
+    prev_expr = builder->create_call(Fun, arguments);
+}
+
+void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
+    auto op = node.op;
+    auto *curFunction = builder->get_insert_block()->get_parent();
+    if (op == SyntaxTree::BinaryCondOp::LAND ||
+        op == SyntaxTree::BinaryCondOp::LOR) {
+        auto *rhsBB = BasicBlock::create(module.get(), "", curFunction);
+
+        auto prevCond = curCondStruct;
+        curCondStruct = op == SyntaxTree::BinaryCondOp::LAND
+                            ? CondStructType{rhsBB, prevCond.falseBB}
+                            : CondStructType{prevCond.trueBB, rhsBB};
+        node.lhs->accept(*this);
+        if (builder->get_insert_block()->get_terminator() == nullptr) {
+            typeConvert(INT1_T);
+            builder->create_cond_br(prev_expr, curCondStruct.trueBB,
+                                    curCondStruct.falseBB);
+        }
+        curCondStruct = prevCond;
+
+        builder->set_insert_point(rhsBB);
+        node.rhs->accept(*this);
+        if (builder->get_insert_block()->get_terminator() == nullptr) {
+            typeConvert(INT1_T);
+            builder->create_cond_br(prev_expr, curCondStruct.trueBB,
+                                    curCondStruct.falseBB);
+        }
+        return;
+    }
+    node.lhs->accept(*this);
+    auto *lhs = prev_expr;
+    node.rhs->accept(*this);
+    auto *rhs = prev_expr;
+    binOpGen(lhs, rhs, BinOp(node.op));
 }
 
 void IRBuilder::visit(SyntaxTree::IfStmt &node) {
-    auto trueBB = BasicBlock::create(module.get(), "", cur_fun);
-    auto falseBB = BasicBlock::create(module.get(), "", cur_fun);
-    auto nextBB = BasicBlock::create(module.get(), "", cur_fun);
-    IF_While_Or_Cond_Stack.push_back({nullptr, nullptr});
-    IF_While_Or_Cond_Stack.back().trueBB = trueBB;
-    if (node.else_statement == nullptr) {
-        IF_While_Or_Cond_Stack.back().falseBB = nextBB;
-    } else {
-        IF_While_Or_Cond_Stack.back().falseBB = falseBB;
-    }
+    const auto prev_cond_struct = curCondStruct;
+
+    auto *curFunction = builder->get_insert_block()->get_parent();
+    auto *trueBB = BasicBlock::create(module.get(), "", curFunction);
+    auto *falseBB = BasicBlock::create(module.get(), "", curFunction);
+    auto *exitBB = node.else_statement
+                       ? BasicBlock::create(module.get(), "", curFunction)
+                       : falseBB;
+
+    curCondStruct = CondStructType{trueBB, falseBB};
+    // 访问条件。可能是逻辑表达式（跳转），也可能需要转换
     node.cond_exp->accept(*this);
-    IF_While_Or_Cond_Stack.pop_back();
-    auto *ret_val = tmp_val;
-    Value *cond_val = dynamic_cast<CmpInst *>(ret_val);
-    Value *f_cond_val = dynamic_cast<FCmpInst *>(ret_val);
-    Value *cond;
-    if (cond_val == nullptr && f_cond_val == nullptr) {
-        if (tmp_val->get_type()->is_integer_type()) {
-            // 如果是 zext 来的，说明可以用 zext 之前的值
-            // zext 语句可删可不删，可以交给后续代码优化部分
-            auto *inst = dynamic_cast<Instruction *>(tmp_val);
-            if (inst != nullptr && inst->is_zext())
-                cond_val = inst->get_operand(0);
-            else
-                cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
-        } else if (tmp_val->get_type()->is_float_type()) {
-            f_cond_val = builder->create_fcmp_ne(tmp_val, CONST_FLOAT(0));
-        }
-    }
-    if (cond_val != nullptr) {
-        cond = cond_val;
-    } else {
-        cond = f_cond_val;
-    }
-    if (node.else_statement == nullptr) {
-        builder->create_cond_br(cond, trueBB, nextBB);
-    } else {
-        builder->create_cond_br(cond, trueBB, falseBB);
-    }
-    cur_basic_block_list.pop_back();
-    builder->set_insert_point(trueBB);
-    cur_basic_block_list.push_back(trueBB);
-    if (dynamic_cast<SyntaxTree::BlockStmt *>(node.if_statement.get())) {
-        node.if_statement->accept(*this);
-    } else {
-        scope.enter();
-        node.if_statement->accept(*this);
-        scope.exit();
-    }
-
     if (builder->get_insert_block()->get_terminator() == nullptr) {
-        builder->create_br(nextBB);
+        typeConvert(INT1_T);
+        builder->create_cond_br(prev_expr, trueBB, falseBB);
     }
-    cur_basic_block_list.pop_back();
+    curCondStruct = prev_cond_struct;
 
-    if (node.else_statement == nullptr) {
-        falseBB->erase_from_parent();
-    } else {
+    builder->set_insert_point(trueBB);
+    node.if_statement->accept(*this);
+    if (builder->get_insert_block()->get_terminator() == nullptr)
+        builder->create_br(exitBB);
+
+    if (node.else_statement) {
         builder->set_insert_point(falseBB);
-        cur_basic_block_list.push_back(falseBB);
-        if (dynamic_cast<SyntaxTree::BlockStmt *>(node.else_statement.get())) {
-            node.else_statement->accept(*this);
-        } else {
-            scope.enter();
-            node.else_statement->accept(*this);
-            scope.exit();
-        }
-        if (builder->get_insert_block()->get_terminator() == nullptr) {
-            builder->create_br(nextBB);
-        }
-        cur_basic_block_list.pop_back();
+        node.else_statement->accept(*this);
+        if (builder->get_insert_block()->get_terminator() == nullptr)
+            builder->create_br(exitBB);
     }
 
-    builder->set_insert_point(nextBB);
-    cur_basic_block_list.push_back(nextBB);
-    if (nextBB->get_pre_basic_blocks().size() == 0) {
+    builder->set_insert_point(exitBB);
+    if (exitBB->get_pre_basic_blocks().empty()) {
         builder->set_insert_point(trueBB);
-        nextBB->erase_from_parent();
+        exitBB->erase_from_parent();
     }
 }
 
 void IRBuilder::visit(SyntaxTree::WhileStmt &node) {
-    auto whileBB = BasicBlock::create(module.get(), "", cur_fun);
-    auto trueBB = BasicBlock::create(module.get(), "", cur_fun);
-    auto nextBB = BasicBlock::create(module.get(), "", cur_fun);
-    While_Stack.push_back({whileBB, nextBB});
+    auto *curFunction = builder->get_insert_block()->get_parent();
+    const auto prev_while_struct = curWhileStruct;
+
+    // 新创建的 BB，更新 WhileStruct
+    auto *condBB = BasicBlock::create(module.get(), "", curFunction);
+    auto *innerBB = BasicBlock::create(module.get(), "", curFunction);
+    auto *exitBB = BasicBlock::create(module.get(), "", curFunction);
+
+    curWhileStruct = WhileStructType{condBB, innerBB, exitBB};
+
+    // 条件。需要维护条件信息并还原
     if (builder->get_insert_block()->get_terminator() == nullptr) {
-        builder->create_br(whileBB);
+        builder->create_br(condBB);
     }
-    cur_basic_block_list.pop_back();
-    builder->set_insert_point(whileBB);
-    IF_While_Or_Cond_Stack.push_back({trueBB, nextBB});
+    builder->set_insert_point(condBB);
+    const auto prev_cond_struct = curCondStruct;
+    curCondStruct = CondStructType{innerBB, exitBB};
+    // 访问条件
     node.cond_exp->accept(*this);
-    IF_While_Or_Cond_Stack.pop_back();
-    auto *ret_val = tmp_val;
-    Value *cond_val = dynamic_cast<CmpInst *>(ret_val);
-    Value *f_cond_val = dynamic_cast<FCmpInst *>(ret_val);
-    Value *cond;
-    if (cond_val == nullptr && f_cond_val == nullptr) {
-        if (tmp_val->get_type()->is_integer_type()) {
-            // 如果是 zext 来的，说明可以用 zext 之前的值
-            // zext 语句可删可不删，可以交给后续代码优化部分
-            auto *inst = dynamic_cast<Instruction *>(tmp_val);
-            if (inst != nullptr && inst->is_zext())
-                cond_val = inst->get_operand(0);
-            else
-                cond_val = builder->create_icmp_ne(tmp_val, CONST_INT(0));
-        } else if (tmp_val->get_type()->is_float_type()) {
-            f_cond_val = builder->create_fcmp_ne(tmp_val, CONST_FLOAT(0));
-        }
-    }
-    if (cond_val != nullptr) {
-        cond = cond_val;
-    } else {
-        cond = f_cond_val;
-    }
-    builder->create_cond_br(cond, trueBB, nextBB);
-    builder->set_insert_point(trueBB);
-    cur_basic_block_list.push_back(trueBB);
-    if (dynamic_cast<SyntaxTree::BlockStmt *>(node.statement.get())) {
-        node.statement->accept(*this);
-    } else {
-        scope.enter();
-        node.statement->accept(*this);
-        scope.exit();
-    }
     if (builder->get_insert_block()->get_terminator() == nullptr) {
-        builder->create_br(whileBB);
+        typeConvert(INT1_T);
+        builder->create_cond_br(prev_expr, innerBB, exitBB);
     }
-    cur_basic_block_list.pop_back();
-    builder->set_insert_point(nextBB);
-    cur_basic_block_list.push_back(nextBB);
-    While_Stack.pop_back();
+    curCondStruct = prev_cond_struct;
+
+    // while 内部
+    builder->set_insert_point(innerBB);
+    node.statement->accept(*this);
+    if (builder->get_insert_block()->get_terminator() == nullptr)
+        builder->create_br(condBB);
+
+    // 出口基本块
+    builder->set_insert_point(exitBB);
+
+    curWhileStruct = prev_while_struct;
 }
 
-void IRBuilder::visit(SyntaxTree::BreakStmt &node) {
-    builder->create_br(While_Stack.back().falseBB);
+void IRBuilder::visit(SyntaxTree::BreakStmt & /*node*/) {
+    builder->create_br(curWhileStruct.exitBB);
 }
 
-void IRBuilder::visit(SyntaxTree::ContinueStmt &node) {
-    builder->create_br(While_Stack.back().trueBB);
+void IRBuilder::visit(SyntaxTree::ContinueStmt & /*node*/) {
+    builder->create_br(curWhileStruct.condBB);
 }
+
+// empty
+void IRBuilder::visit(SyntaxTree::FuncFParamList &node) {}
+void IRBuilder::visit(SyntaxTree::FuncParam &node) {}
+void IRBuilder::visit(SyntaxTree::EmptyStmt &node) {}
