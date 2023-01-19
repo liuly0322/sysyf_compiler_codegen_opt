@@ -61,58 +61,60 @@ Type *SyntaxTreeTytoLLVMTy(SyntaxTree::Type type, bool isPtr = false) {
     Type *base_type = baseTypetoLLVMTy(type);
     if (base_type == nullptr || !isPtr) {
         return base_type;
-    };
+    }
     return Type::get_pointer_type(base_type);
 }
 
-void IRBuilder::typeConvert(Type *expected) {
+Value *IRBuilder::typeConvert(Value *expr, Type *expected) {
     // Constants
-    if (dynamic_cast<Constant *>(prev_expr) != nullptr) {
-        auto *prev_int = dynamic_cast<ConstantInt *>(prev_expr);
-        auto *prev_float = dynamic_cast<ConstantFloat *>(prev_expr);
-        if (prev_int != nullptr) {
+    if (dynamic_cast<Constant *>(expr) != nullptr) {
+        auto *is_const_int = dynamic_cast<ConstantInt *>(expr);
+        auto *is_const_float = dynamic_cast<ConstantFloat *>(expr);
+        if (is_const_int != nullptr) {
             if (expected == FLOAT_T)
-                prev_expr = CONST_FLOAT(prev_int->get_value());
-            else if (expected == INT1_T)
-                prev_expr = CONST_INT(prev_int->get_value() != 0);
+                return CONST_FLOAT(is_const_int->get_value());
+            if (expected == INT1_T)
+                return CONST_INT(is_const_int->get_value() != 0);
         }
-        if (prev_float != nullptr) {
+        if (is_const_float != nullptr) {
             if (expected == INT32_T)
-                prev_expr =
-                    CONST_INT(static_cast<int>(prev_float->get_value()));
-            else if (expected == INT1_T)
-                prev_expr = CONST_INT(prev_float->get_value() != 0);
+                return CONST_INT(static_cast<int>(is_const_float->get_value()));
+            if (expected == INT1_T)
+                return CONST_INT(is_const_float->get_value() != 0);
         }
-        return;
+        return expr;
     }
 
-    auto *type = prev_expr->get_type();
+    auto *type = expr->get_type();
     if (type == expected) {
-        return;
+        return expr;
     }
 
     // pointer deref
     if (type->is_pointer_type()) {
         type = type->get_pointer_element_type();
-        prev_expr = builder->create_load(prev_expr);
+        expr = builder->create_load(expr);
+    }
+
+    // bool cast to int
+    if (type == INT1_T && expected != INT1_T) {
+        type = INT32_T;
+        expr = builder->create_zext(expr, expected);
     }
 
     if (type == INT32_T && expected == FLOAT_T) {
-        prev_expr = builder->create_sitofp(prev_expr, expected);
-        return;
+        return builder->create_sitofp(expr, expected);
     }
     if (type == FLOAT_T && expected == INT32_T) {
-        prev_expr = builder->create_fptosi(prev_expr, expected);
-        return;
+        return builder->create_fptosi(expr, expected);
     }
     if (type == INT32_T && expected == INT1_T) {
-        prev_expr = builder->create_icmp_ne(prev_expr, CONST_INT(0));
-        return;
+        return builder->create_icmp_ne(expr, CONST_INT(0));
     }
     if (type == FLOAT_T && expected == INT1_T) {
-        prev_expr = builder->create_fcmp_ne(prev_expr, CONST_FLOAT(0));
-        return;
+        return builder->create_fcmp_ne(expr, CONST_FLOAT(0));
     }
+    return expr;
 }
 
 void IRBuilder::binOpGen(Value *lhs, Value *rhs, BinOp op) {
@@ -232,13 +234,12 @@ void IRBuilder::binOpGen(Value *lhs, Value *rhs, BinOp op) {
     }
 
     // Type convert
-    if (lhs->get_type()->is_float_type() &&
-        rhs->get_type()->is_integer_type()) {
-        rhs = builder->create_sitofp(rhs, FLOAT_T);
-    }
-    if (lhs->get_type()->is_integer_type() &&
-        rhs->get_type()->is_float_type()) {
-        lhs = builder->create_sitofp(lhs, FLOAT_T);
+    if (lhs->get_type()->is_float_type() || rhs->get_type()->is_float_type()) {
+        lhs = typeConvert(lhs, FLOAT_T);
+        rhs = typeConvert(rhs, FLOAT_T);
+    } else {
+        lhs = typeConvert(lhs, INT32_T);
+        rhs = typeConvert(rhs, INT32_T);
     }
     const bool is_int = lhs->get_type()->is_integer_type();
     if (op.flag == BinOp::isBinOp) {
@@ -410,7 +411,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
             std::vector<Constant *> initializer_values;
             for (const auto &val : node.initializers->elementList) {
                 val->accept(*this);
-                typeConvert(element_type);
+                prev_expr = typeConvert(prev_expr, element_type);
                 initializer_values.push_back(
                     dynamic_cast<Constant *>(prev_expr));
             }
@@ -420,7 +421,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
             auto *const_zero = CONST_INT(0);
             for (auto i = 0U; i < array_length; i++) {
                 prev_expr = const_zero;
-                typeConvert(element_type);
+                prev_expr = typeConvert(prev_expr, element_type);
                 initializer_values.push_back(
                     dynamic_cast<Constant *>(prev_expr));
             }
@@ -433,12 +434,11 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
             if (node.is_constant) {
                 // 全局常量，用 const 替换
                 node.initializers->expr->accept(*this);
-                typeConvert(element_type);
-                alloca = prev_expr;
+                alloca = typeConvert(prev_expr, element_type);
             } else {
                 // 正常分配
                 node.initializers->expr->accept(*this);
-                typeConvert(element_type);
+                prev_expr = typeConvert(prev_expr, element_type);
                 auto *const_expr = dynamic_cast<Constant *>(prev_expr);
                 alloca = GlobalVariable::create(node.name, module.get(), type,
                                                 false, const_expr);
@@ -447,8 +447,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
     } else if (node.is_constant && !is_array) {
         // 局部常量初始化，用 const 替换
         node.initializers->expr->accept(*this);
-        typeConvert(element_type);
-        alloca = prev_expr;
+        alloca = typeConvert(prev_expr, element_type);
     } else {
         // 其他局部变量
         // 统一在最开始的基本块分配变量，防止循环造成的内存泄漏
@@ -468,7 +467,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
     }
     if (!is_array) {
         node.initializers->expr->accept(*this);
-        typeConvert(element_type);
+        prev_expr = typeConvert(prev_expr, element_type);
         builder->create_store(prev_expr, alloca);
         return;
     }
@@ -479,7 +478,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
     // 已知初始化值的
     for (auto i = 0; i < inited_size; i++) {
         node.initializers->elementList[i]->accept(*this);
-        typeConvert(element_type);
+        prev_expr = typeConvert(prev_expr, element_type);
         auto *ptr = builder->create_gep(alloca, {CONST_INT(0), CONST_INT(i)});
         builder->create_store(prev_expr, ptr);
     }
@@ -487,7 +486,7 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
     auto *const_zero = CONST_INT(0);
     for (auto i = inited_size; i < static_cast<int>(array_size); i++) {
         prev_expr = const_zero;
-        typeConvert(element_type);
+        prev_expr = typeConvert(prev_expr, element_type);
         auto *ptr = builder->create_gep(alloca, {CONST_INT(0), CONST_INT(i)});
         builder->create_store(prev_expr, ptr);
     }
@@ -496,7 +495,6 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
 void IRBuilder::visit(SyntaxTree::InitVal &node) { node.expr->accept(*this); }
 
 void IRBuilder::visit(SyntaxTree::LVal &node) {
-    // 变量，实际不一定具有左值（const 常量）
     // const 常量返回值，否则返回地址
     // 首先获取变量（地址）
     auto name = node.name;
@@ -529,8 +527,7 @@ void IRBuilder::visit(SyntaxTree::LVal &node) {
         if (const_index == nullptr) {
             index_all_const = false;
         }
-        typeConvert(INT32_T);
-        indexes.push_back(prev_expr);
+        indexes.push_back(typeConvert(prev_expr, INT32_T));
     }
 
     // 如果数组是 const，下标也是 const，直接返回 Constant*
@@ -552,17 +549,16 @@ void IRBuilder::visit(SyntaxTree::AssignStmt &node) {
     node.target->accept(*this);
     auto *ptr = prev_expr;
     node.value->accept(*this);
-    typeConvert(ptr->get_type()->get_pointer_element_type());
-    auto *value = prev_expr;
+    auto *value =
+        typeConvert(prev_expr, ptr->get_type()->get_pointer_element_type());
     builder->create_store(value, ptr);
 }
 
 void IRBuilder::visit(SyntaxTree::Literal &node) {
-    if (node.literal_type == SyntaxTree::Type::FLOAT) {
+    if (node.literal_type == SyntaxTree::Type::FLOAT)
         prev_expr = CONST_FLOAT(node.float_const);
-    } else if (node.literal_type == SyntaxTree::Type::INT) {
+    else if (node.literal_type == SyntaxTree::Type::INT)
         prev_expr = CONST_INT(node.int_const);
-    }
 }
 
 void IRBuilder::visit(SyntaxTree::ReturnStmt &node) {
@@ -570,8 +566,7 @@ void IRBuilder::visit(SyntaxTree::ReturnStmt &node) {
         node.ret->accept(*this);
         auto *expected_type =
             builder->get_insert_block()->get_parent()->get_return_type();
-        typeConvert(expected_type);
-        builder->create_store(prev_expr, ret_addr);
+        builder->create_store(typeConvert(prev_expr, expected_type), ret_addr);
     }
     builder->create_br(ret_BB);
 }
@@ -590,18 +585,41 @@ void IRBuilder::visit(SyntaxTree::ExprStmt &node) { node.exp->accept(*this); }
 
 void IRBuilder::visit(SyntaxTree::UnaryCondExpr &node) {
     // 文法上，这个后面只能跟一元算数表达式，无法跟随条件表达式
-    // 也就是 !(a == 0) 其实是不合法的。。。
-    // 所以这里可以看成是：“计算”，最后输出还是 32 位 INT
+    // 所以这里可以看成是：“计算”
     node.rhs->accept(*this);
-    typeConvert(INT1_T);
-    auto *const_int = dynamic_cast<ConstantInt *>(prev_expr);
-    if (const_int != nullptr) {
-        prev_expr = CONST_INT(const_int->get_value() == 0 ? 1 : 0);
+    auto *type = prev_expr->get_type();
+    if (type->is_pointer_type()) {
+        type = type->get_pointer_element_type();
+        prev_expr = builder->create_load(prev_expr);
+    }
+    if (type == INT32_T) {
+        prev_expr = builder->create_icmp_eq(prev_expr, CONST_INT(0));
         return;
     }
-    prev_expr = builder->create_zext(prev_expr, INT32_T);
-    prev_expr = builder->create_icmp_eq(prev_expr, CONST_INT(0));
-    prev_expr = builder->create_zext(prev_expr, INT32_T);
+    if (type == FLOAT_T) {
+        prev_expr = builder->create_fcmp_eq(prev_expr, CONST_FLOAT(0));
+        return;
+    }
+    if (type == INT1_T) {
+        if (auto *value = dynamic_cast<ConstantInt *>(prev_expr)) {
+            prev_expr = CONST_INT(value->get_value() == 0);
+            return;
+        }
+        // 反转比较运算符
+        auto fcmp_lut = std::map<FCmpInst::CmpOp, FCmpInst::CmpOp>{
+            {FCmpInst::EQ, FCmpInst::NE}, {FCmpInst::NE, FCmpInst::EQ},
+            {FCmpInst::GT, FCmpInst::LE}, {FCmpInst::LE, FCmpInst::GT},
+            {FCmpInst::LT, FCmpInst::GE}, {FCmpInst::GE, FCmpInst::LT}};
+        auto cmp_lut = std::map<CmpInst::CmpOp, CmpInst::CmpOp>{
+            {CmpInst::EQ, CmpInst::NE}, {CmpInst::NE, CmpInst::EQ},
+            {CmpInst::GT, CmpInst::LE}, {CmpInst::LE, CmpInst::GT},
+            {CmpInst::LT, CmpInst::GE}, {CmpInst::GE, CmpInst::LT}};
+        if (auto *cmp_inst = dynamic_cast<CmpInst *>(prev_expr)) {
+            cmp_inst->set_cmp_op(cmp_lut[cmp_inst->get_cmp_op()]);
+        } else if (auto *fcmp_inst = dynamic_cast<FCmpInst *>(prev_expr)) {
+            fcmp_inst->set_cmp_op(fcmp_lut[fcmp_inst->get_cmp_op()]);
+        }
+    }
 }
 
 void IRBuilder::visit(SyntaxTree::BinaryExpr &node) {
@@ -638,7 +656,7 @@ void IRBuilder::visit(SyntaxTree::FuncCallStmt &node) {
     auto arg_end = Fun->arg_end();
     while (arg != arg_end && param != param_end) {
         (*param)->accept(*this);
-        typeConvert((*arg)->get_type());
+        prev_expr = typeConvert(prev_expr, (*arg)->get_type());
         arguments.push_back(prev_expr);
         arg++, param++;
     }
@@ -658,7 +676,7 @@ void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
                             : CondStructType{prevCond.trueBB, rhsBB};
         node.lhs->accept(*this);
         if (builder->get_insert_block()->get_terminator() == nullptr) {
-            typeConvert(INT1_T);
+            prev_expr = typeConvert(prev_expr, INT1_T);
             builder->create_cond_br(prev_expr, curCondStruct.trueBB,
                                     curCondStruct.falseBB);
         }
@@ -667,7 +685,7 @@ void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
         builder->set_insert_point(rhsBB);
         node.rhs->accept(*this);
         if (builder->get_insert_block()->get_terminator() == nullptr) {
-            typeConvert(INT1_T);
+            prev_expr = typeConvert(prev_expr, INT1_T);
             builder->create_cond_br(prev_expr, curCondStruct.trueBB,
                                     curCondStruct.falseBB);
         }
@@ -694,7 +712,7 @@ void IRBuilder::visit(SyntaxTree::IfStmt &node) {
     // 访问条件。可能是逻辑表达式（跳转），也可能需要转换
     node.cond_exp->accept(*this);
     if (builder->get_insert_block()->get_terminator() == nullptr) {
-        typeConvert(INT1_T);
+        prev_expr = typeConvert(prev_expr, INT1_T);
         builder->create_cond_br(prev_expr, trueBB, falseBB);
     }
     curCondStruct = prev_cond_struct;
@@ -739,7 +757,7 @@ void IRBuilder::visit(SyntaxTree::WhileStmt &node) {
     // 访问条件
     node.cond_exp->accept(*this);
     if (builder->get_insert_block()->get_terminator() == nullptr) {
-        typeConvert(INT1_T);
+        prev_expr = typeConvert(prev_expr, INT1_T);
         builder->create_cond_br(prev_expr, innerBB, exitBB);
     }
     curCondStruct = prev_cond_struct;

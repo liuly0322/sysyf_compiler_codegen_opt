@@ -76,7 +76,7 @@ struct BinOp {
 
 class IRBuilder : public SyntaxTree::Visitor {
   private:
-    void typeConvert(Type *);
+    Value *typeConvert(Value *prev_expr, Type *);
     void binOpGen(Value *, Value *, BinOp);
     void visit(SyntaxTree::InitVal &) final;
     void visit(SyntaxTree::Assembly &) final;

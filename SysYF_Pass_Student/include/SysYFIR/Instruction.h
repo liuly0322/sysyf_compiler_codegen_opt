@@ -231,6 +231,7 @@ class CmpInst : public Instruction {
                                Module *m);
 
     CmpOp get_cmp_op() { return cmp_op_; }
+    void set_cmp_op(CmpOp op) { cmp_op_ = op; }
 
     virtual std::string print() override;
 
@@ -259,6 +260,7 @@ class FCmpInst : public Instruction {
                                  BasicBlock *bb, Module *m);
 
     CmpOp get_cmp_op() { return cmp_op_; }
+    void set_cmp_op(CmpOp op) { cmp_op_ = op; }
 
     virtual std::string print() override;
 
