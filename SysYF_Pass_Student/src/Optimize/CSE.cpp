@@ -34,14 +34,21 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     // assert inst1 is load
     if (!inst1->is_load())
         return false;
-    auto *lval = inst1->get_operand(0);
-    auto *target = findOrigin(lval);
+    auto *lval_load = inst1->get_operand(0);
+    auto *target_load = findOrigin(lval_load);
+    auto isArgOrGlobalArrayOp = [](Value *lval, Value *target) {
+        return dynamic_cast<Argument *>(target) != nullptr ||
+               (dynamic_cast<GlobalVariable *>(target) != nullptr &&
+                dynamic_cast<GlobalVariable *>(lval) == nullptr);
+    };
     // 1. argument or global array
-    if (dynamic_cast<Argument *>(target) != nullptr ||
-        (dynamic_cast<GlobalVariable *>(target) != nullptr &&
-         dynamic_cast<GlobalVariable *>(lval) == nullptr)) {
-        if (inst2->is_store())
-            return true;
+    if (isArgOrGlobalArrayOp(lval_load, target_load)) {
+        if (inst2->is_store()) {
+            // if inst2 is also argument or global array store
+            auto *lval_store = inst2->get_operand(1);
+            auto *target_store = findOrigin(lval_store);
+            return isArgOrGlobalArrayOp(lval_store, target_store);
+        }
         if (inst2->is_call()) {
             auto *callee = dynamic_cast<Function *>(inst2->get_operand(0));
             return !is_pure[callee];
@@ -50,14 +57,14 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     }
     // 2. local array or global variable
     if (inst2->is_store()) {
-        return target == findOrigin(inst2->get_operand(1));
+        return target_load == findOrigin(inst2->get_operand(1));
     }
     if (inst2->is_call()) {
         auto *callee = static_cast<Function *>(inst2->get_operand(0));
-        if (global_var_store_effects[callee].count(lval) != 0)
+        if (global_var_store_effects[callee].count(lval_load) != 0)
             return true;
         for (auto *opr : inst2->get_operands())
-            if (findOrigin(opr) == target)
+            if (findOrigin(opr) == target_load)
                 return true;
     }
     return false;
