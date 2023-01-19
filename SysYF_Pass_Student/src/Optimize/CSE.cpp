@@ -5,6 +5,7 @@
 #include <vector>
 
 using PureFunction::global_var_store_effects;
+using PureFunction::is_pure;
 using PureFunction::markPure;
 
 void CSE::execute() {
@@ -38,8 +39,15 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     // 1. argument or global array
     if (dynamic_cast<Argument *>(target) != nullptr ||
         (dynamic_cast<GlobalVariable *>(target) != nullptr &&
-         dynamic_cast<GlobalVariable *>(lval) == nullptr))
-        return inst2->is_call() || inst2->is_store();
+         dynamic_cast<GlobalVariable *>(lval) == nullptr)) {
+        if (inst2->is_store())
+            return true;
+        if (inst2->is_call()) {
+            auto *callee = dynamic_cast<Function *>(inst2->get_operand(0));
+            return !is_pure[callee];
+        }
+        return false;
+    }
     // 2. local array or global variable
     if (inst2->is_store()) {
         return target == findOrigin(inst2->get_operand(1));
