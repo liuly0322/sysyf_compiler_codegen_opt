@@ -31,7 +31,7 @@ static inline void delete_basic_block(BasicBlock *i, BasicBlock *j) {
         j->add_pre_basic_block(pre);
     }
     // 删除基本块 i
-    i->get_parent()->remove(i);
+    i->erase_from_parent();
 }
 
 bool DeadCode::is_critical_inst(Instruction *inst) {
