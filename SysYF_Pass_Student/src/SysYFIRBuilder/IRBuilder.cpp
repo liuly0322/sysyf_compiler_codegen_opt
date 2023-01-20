@@ -13,7 +13,6 @@
 #define CONST_INT(num) ConstantInt::get(num, module.get())
 #define CONST_FLOAT(num) ConstantFloat::get(num, module.get())
 
-// Global variables and functions here to store state
 // last visited expr
 Value *prev_expr = nullptr;
 
@@ -102,18 +101,15 @@ Value *IRBuilder::typeConvert(Value *expr, Type *expected) {
         expr = builder->create_zext(expr, expected);
     }
 
-    if (type == INT32_T && expected == FLOAT_T) {
+    if (type == INT32_T && expected == FLOAT_T)
         return builder->create_sitofp(expr, expected);
-    }
-    if (type == FLOAT_T && expected == INT32_T) {
+    if (type == FLOAT_T && expected == INT32_T)
         return builder->create_fptosi(expr, expected);
-    }
-    if (type == INT32_T && expected == INT1_T) {
+    if (type == INT32_T && expected == INT1_T)
         return builder->create_icmp_ne(expr, CONST_INT(0));
-    }
-    if (type == FLOAT_T && expected == INT1_T) {
+    if (type == FLOAT_T && expected == INT1_T)
         return builder->create_fcmp_ne(expr, CONST_FLOAT(0));
-    }
+
     return expr;
 }
 
@@ -313,13 +309,12 @@ void IRBuilder::visit(SyntaxTree::Assembly &node) {
     INT1_T = Type::get_int1_type(module.get());
     INT32_T = Type::get_int32_type(module.get());
     FLOAT_T = Type::get_float_type(module.get());
-    for (const auto &def : node.global_defs) {
+    for (const auto &def : node.global_defs)
         def->accept(*this);
-    }
 }
 
 void IRBuilder::visit(SyntaxTree::FuncDef &node) {
-    // 访问函数声明，存储到全局作用域
+    // 函数声明
     auto *ret_type = SyntaxTreeTytoLLVMTy(node.ret_type);
     std::vector<Type *> params{};
     for (const auto &param : node.param_list->params) {
@@ -330,11 +325,9 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
     auto *Fun = Function::create(FunTy, node.name, module.get());
     scope.push(node.name, Fun);
 
-    // 处理函数体
     scope.enter();
 
-    // 参数存储到函数内部作用域
-    // 要分配栈上空间，使得拥有左值
+    // 分配函数参数的空间
     auto *entryBlock = BasicBlock::create(module.get(), "entry", Fun);
     builder->set_insert_point(entryBlock);
     auto arg = Fun->arg_begin();
@@ -350,10 +343,9 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
         arg++, param++;
     }
 
-    // 返回值
+    // 返回值和返回基本块
     if (ret_type != VOID_T)
         ret_addr = builder->create_alloca(ret_type);
-
     ret_BB = BasicBlock::create(module.get(), "ret", Fun);
     builder->set_insert_point(ret_BB);
     if (ret_type == VOID_T) {
@@ -362,9 +354,9 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
         auto *ret_val = builder->create_load(ret_addr);
         builder->create_ret(ret_val);
     }
-    builder->set_insert_point(entryBlock);
 
-    // 访问函数体，翻译
+    // 访问函数体
+    builder->set_insert_point(entryBlock);
     for (const auto &stmt : node.body->body) {
         stmt->accept(*this);
         if (builder->get_insert_block()->get_terminator() != nullptr)
@@ -372,12 +364,10 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
     }
 
     // 可能省略了返回语句
+    auto *default_ret_val = typeConvert(CONST_INT(0), ret_type);
     if (builder->get_insert_block()->get_terminator() == nullptr) {
-        if (ret_type == INT32_T) {
-            builder->create_store(CONST_INT(0), ret_addr);
-        } else if (ret_type == FLOAT_T) {
-            builder->create_store(CONST_FLOAT(0), ret_addr);
-        }
+        if (ret_type != VOID_T)
+            builder->create_store(default_ret_val, ret_addr);
         builder->create_br(ret_BB);
     }
 
@@ -395,99 +385,82 @@ void IRBuilder::visit(SyntaxTree::VarDef &node) {
         type = Type::get_array_type(type, const_int->get_value());
     }
 
-    // 申请空间 或 常量
-    Value *alloca;
+    auto get_array_init = [&]() {
+        std::vector<Constant *> initializer_values;
+        for (const auto &val : node.initializers->elementList) {
+            val->accept(*this);
+            prev_expr = typeConvert(prev_expr, element_type);
+            initializer_values.push_back(dynamic_cast<Constant *>(prev_expr));
+        }
+        auto zero_length =
+            static_cast<ArrayType *>(type)->get_num_of_elements() -
+            static_cast<int>(initializer_values.size());
+        auto *const_zero = typeConvert(CONST_INT(0), element_type);
+        for (auto i = 0U; i < zero_length; i++)
+            initializer_values.push_back(dynamic_cast<Constant *>(const_zero));
+        return ConstantArray::get(static_cast<ArrayType *>(type),
+                                  initializer_values);
+    };
+
+    auto create_glob = [&](const std::string &name, Constant *init) {
+        return GlobalVariable::create(name, module.get(), type,
+                                      node.is_constant, init);
+    };
+
+    Value *addr;
     if (scope.in_global()) {
-        // 全局，特例是零初始化
-        // 剩余变量都是有初始化值的，分为数组初始化和变量初始化讨论
         if (!node.is_inited ||
             (is_array && node.initializers->elementList.empty())) {
-            // 0 初始化
-            auto *zero_initializer = ConstantZero::get(type, module.get());
-            alloca = GlobalVariable::create(node.name, module.get(), type,
-                                            false, zero_initializer);
+            auto *initializer = ConstantZero::get(type, module.get());
+            addr = create_glob(node.name, initializer);
         } else if (is_array) {
-            // 已初始化的全局数组
-            std::vector<Constant *> initializer_values;
-            for (const auto &val : node.initializers->elementList) {
-                val->accept(*this);
-                prev_expr = typeConvert(prev_expr, element_type);
-                initializer_values.push_back(
-                    dynamic_cast<Constant *>(prev_expr));
-            }
-            auto array_length =
-                static_cast<ArrayType *>(type)->get_num_of_elements() -
-                static_cast<int>(initializer_values.size());
-            auto *const_zero = CONST_INT(0);
-            for (auto i = 0U; i < array_length; i++) {
-                prev_expr = const_zero;
-                prev_expr = typeConvert(prev_expr, element_type);
-                initializer_values.push_back(
-                    dynamic_cast<Constant *>(prev_expr));
-            }
-            auto *initializer = ConstantArray::get(
-                static_cast<ArrayType *>(type), initializer_values);
-            alloca = GlobalVariable::create(node.name, module.get(), type,
-                                            node.is_constant, initializer);
+            addr = create_glob(node.name, get_array_init());
         } else {
-            // 变量初始化
-            if (node.is_constant) {
-                // 全局常量，用 const 替换
-                node.initializers->expr->accept(*this);
-                alloca = typeConvert(prev_expr, element_type);
-            } else {
-                // 正常分配
-                node.initializers->expr->accept(*this);
-                prev_expr = typeConvert(prev_expr, element_type);
-                auto *const_expr = dynamic_cast<Constant *>(prev_expr);
-                alloca = GlobalVariable::create(node.name, module.get(), type,
-                                                false, const_expr);
-            }
+            node.initializers->expr->accept(*this);
+            addr = typeConvert(prev_expr, element_type);
+            if (!node.is_constant)
+                addr = create_glob(node.name, dynamic_cast<Constant *>(addr));
         }
-    } else if (node.is_constant && !is_array) {
-        // 局部常量初始化，用 const 替换
-        node.initializers->expr->accept(*this);
-        alloca = typeConvert(prev_expr, element_type);
-    } else {
-        // 其他局部变量
-        // 统一在最开始的基本块分配变量，防止循环造成的内存泄漏
-        auto *entryBB =
-            builder->get_insert_block()->get_parent()->get_entry_block();
-        alloca = AllocaInst::create_alloca(type, entryBB);
+    } else if (!node.is_constant) {
+        auto *entryBB = ret_BB->get_parent()->get_entry_block();
+        addr = AllocaInst::create_alloca(type, entryBB);
         entryBB->get_instructions().pop_back();
-        entryBB->add_instr_begin(static_cast<Instruction *>(alloca));
+        entryBB->add_instr_begin(static_cast<Instruction *>(addr));
+    } else if (is_array) {
+        auto fun_name = ret_BB->get_parent()->get_name();
+        auto array_name = "__const." + fun_name + "." + node.name;
+        while (scope.find(array_name, false) != nullptr)
+            array_name += ".1";
+        addr = create_glob(array_name, get_array_init());
+    } else {
+        node.initializers->expr->accept(*this);
+        addr = typeConvert(prev_expr, element_type);
     }
 
     // 保存到符号表
-    scope.push(node.name, alloca);
+    scope.push(node.name, addr);
 
-    // 处理局部变量初始化
-    if (scope.in_global() || !node.is_inited) {
+    // 处理局部变量及数组初始化
+    if ((dynamic_cast<AllocaInst *>(addr) == nullptr) || !node.is_inited) {
         return;
     }
     if (!is_array) {
         node.initializers->expr->accept(*this);
         prev_expr = typeConvert(prev_expr, element_type);
-        builder->create_store(prev_expr, alloca);
+        builder->create_store(prev_expr, addr);
         return;
     }
-    if (!node.is_inited)
-        return;
+    auto *const_zero = typeConvert(CONST_INT(0), element_type);
     auto array_size = static_cast<ArrayType *>(type)->get_num_of_elements();
     auto inited_size = static_cast<int>(node.initializers->elementList.size());
-    // 已知初始化值的
-    for (auto i = 0; i < inited_size; i++) {
-        node.initializers->elementList[i]->accept(*this);
-        prev_expr = typeConvert(prev_expr, element_type);
-        auto *ptr = builder->create_gep(alloca, {CONST_INT(0), CONST_INT(i)});
-        builder->create_store(prev_expr, ptr);
-    }
-    // 其余 0 填充
-    auto *const_zero = CONST_INT(0);
-    for (auto i = inited_size; i < static_cast<int>(array_size); i++) {
-        prev_expr = const_zero;
-        prev_expr = typeConvert(prev_expr, element_type);
-        auto *ptr = builder->create_gep(alloca, {CONST_INT(0), CONST_INT(i)});
+    for (auto i = 0; i < static_cast<int>(array_size); i++) {
+        if (i < inited_size) {
+            node.initializers->elementList[i]->accept(*this);
+            prev_expr = typeConvert(prev_expr, element_type);
+        } else {
+            prev_expr = const_zero;
+        }
+        auto *ptr = builder->create_gep(addr, {CONST_INT(0), CONST_INT(i)});
         builder->create_store(prev_expr, ptr);
     }
 }
@@ -533,11 +506,12 @@ void IRBuilder::visit(SyntaxTree::LVal &node) {
     // 如果数组是 const，下标也是 const，直接返回 Constant*
     auto *ptr_global = dynamic_cast<GlobalVariable *>(ptr);
     if (ptr_global != nullptr && ptr_global->is_const() && index_all_const) {
-        auto *initArray = dynamic_cast<ConstantArray *>(ptr_global->get_init());
-        for (auto &iter = ++indexes.begin(); iter != indexes.end(); iter++) {
-            prev_expr = initArray->get_element_value(
+        auto *initVal = ptr_global->get_init();
+        for (auto iter = ++indexes.begin(); iter != indexes.end(); iter++) {
+            initVal = dynamic_cast<ConstantArray *>(initVal)->get_element_value(
                 dynamic_cast<ConstantInt *>(*iter)->get_value());
         }
+        prev_expr = initVal;
         return;
     }
 
@@ -564,8 +538,7 @@ void IRBuilder::visit(SyntaxTree::Literal &node) {
 void IRBuilder::visit(SyntaxTree::ReturnStmt &node) {
     if (node.ret) {
         node.ret->accept(*this);
-        auto *expected_type =
-            builder->get_insert_block()->get_parent()->get_return_type();
+        auto *expected_type = ret_addr->get_type()->get_pointer_element_type();
         builder->create_store(typeConvert(prev_expr, expected_type), ret_addr);
     }
     builder->create_br(ret_BB);
@@ -605,7 +578,6 @@ void IRBuilder::visit(SyntaxTree::UnaryCondExpr &node) {
             prev_expr = CONST_INT(value->get_value() == 0);
             return;
         }
-        // 反转比较运算符
         auto fcmp_lut = std::map<FCmpInst::CmpOp, FCmpInst::CmpOp>{
             {FCmpInst::EQ, FCmpInst::NE}, {FCmpInst::NE, FCmpInst::EQ},
             {FCmpInst::GT, FCmpInst::LE}, {FCmpInst::LE, FCmpInst::GT},
@@ -614,11 +586,10 @@ void IRBuilder::visit(SyntaxTree::UnaryCondExpr &node) {
             {CmpInst::EQ, CmpInst::NE}, {CmpInst::NE, CmpInst::EQ},
             {CmpInst::GT, CmpInst::LE}, {CmpInst::LE, CmpInst::GT},
             {CmpInst::LT, CmpInst::GE}, {CmpInst::GE, CmpInst::LT}};
-        if (auto *cmp_inst = dynamic_cast<CmpInst *>(prev_expr)) {
+        if (auto *cmp_inst = dynamic_cast<CmpInst *>(prev_expr))
             cmp_inst->set_cmp_op(cmp_lut[cmp_inst->get_cmp_op()]);
-        } else if (auto *fcmp_inst = dynamic_cast<FCmpInst *>(prev_expr)) {
+        else if (auto *fcmp_inst = dynamic_cast<FCmpInst *>(prev_expr))
             fcmp_inst->set_cmp_op(fcmp_lut[fcmp_inst->get_cmp_op()]);
-        }
     }
 }
 
@@ -632,18 +603,16 @@ void IRBuilder::visit(SyntaxTree::BinaryExpr &node) {
 
 void IRBuilder::visit(SyntaxTree::UnaryExpr &node) {
     node.rhs->accept(*this);
-    if (node.op == SyntaxTree::UnaryOp::PLUS) {
+    if (node.op == SyntaxTree::UnaryOp::PLUS)
         return;
-    }
     auto *const_int = dynamic_cast<ConstantInt *>(prev_expr);
     auto *const_float = dynamic_cast<ConstantFloat *>(prev_expr);
-    if (const_int != nullptr) {
+    if (const_int != nullptr)
         prev_expr = CONST_INT(-const_int->get_value());
-    } else if (const_float != nullptr) {
+    else if (const_float != nullptr)
         prev_expr = CONST_FLOAT(-const_float->get_value());
-    } else {
+    else
         binOpGen(CONST_INT(0), prev_expr, BinOp(SyntaxTree::BinOp::MINUS));
-    }
 }
 
 void IRBuilder::visit(SyntaxTree::FuncCallStmt &node) {
@@ -665,7 +634,7 @@ void IRBuilder::visit(SyntaxTree::FuncCallStmt &node) {
 
 void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
     auto op = node.op;
-    auto *curFunction = builder->get_insert_block()->get_parent();
+    auto *curFunction = ret_BB->get_parent();
     if (op == SyntaxTree::BinaryCondOp::LAND ||
         op == SyntaxTree::BinaryCondOp::LOR) {
         auto *rhsBB = BasicBlock::create(module.get(), "", curFunction);
@@ -699,17 +668,15 @@ void IRBuilder::visit(SyntaxTree::BinaryCondExpr &node) {
 }
 
 void IRBuilder::visit(SyntaxTree::IfStmt &node) {
-    const auto prev_cond_struct = curCondStruct;
-
-    auto *curFunction = builder->get_insert_block()->get_parent();
+    auto *curFunction = ret_BB->get_parent();
     auto *trueBB = BasicBlock::create(module.get(), "", curFunction);
     auto *falseBB = BasicBlock::create(module.get(), "", curFunction);
     auto *exitBB = node.else_statement
                        ? BasicBlock::create(module.get(), "", curFunction)
                        : falseBB;
 
+    const auto prev_cond_struct = curCondStruct;
     curCondStruct = CondStructType{trueBB, falseBB};
-    // 访问条件。可能是逻辑表达式（跳转），也可能需要转换
     node.cond_exp->accept(*this);
     if (builder->get_insert_block()->get_terminator() == nullptr) {
         prev_expr = typeConvert(prev_expr, INT1_T);
@@ -737,24 +704,20 @@ void IRBuilder::visit(SyntaxTree::IfStmt &node) {
 }
 
 void IRBuilder::visit(SyntaxTree::WhileStmt &node) {
-    auto *curFunction = builder->get_insert_block()->get_parent();
-    const auto prev_while_struct = curWhileStruct;
-
-    // 新创建的 BB，更新 WhileStruct
+    auto *curFunction = ret_BB->get_parent();
     auto *condBB = BasicBlock::create(module.get(), "", curFunction);
     auto *innerBB = BasicBlock::create(module.get(), "", curFunction);
     auto *exitBB = BasicBlock::create(module.get(), "", curFunction);
 
+    const auto prev_while_struct = curWhileStruct;
     curWhileStruct = WhileStructType{condBB, innerBB, exitBB};
 
-    // 条件。需要维护条件信息并还原
-    if (builder->get_insert_block()->get_terminator() == nullptr) {
+    if (builder->get_insert_block()->get_terminator() == nullptr)
         builder->create_br(condBB);
-    }
     builder->set_insert_point(condBB);
+
     const auto prev_cond_struct = curCondStruct;
     curCondStruct = CondStructType{innerBB, exitBB};
-    // 访问条件
     node.cond_exp->accept(*this);
     if (builder->get_insert_block()->get_terminator() == nullptr) {
         prev_expr = typeConvert(prev_expr, INT1_T);
@@ -762,13 +725,11 @@ void IRBuilder::visit(SyntaxTree::WhileStmt &node) {
     }
     curCondStruct = prev_cond_struct;
 
-    // while 内部
     builder->set_insert_point(innerBB);
     node.statement->accept(*this);
     if (builder->get_insert_block()->get_terminator() == nullptr)
         builder->create_br(condBB);
 
-    // 出口基本块
     builder->set_insert_point(exitBB);
 
     curWhileStruct = prev_while_struct;
