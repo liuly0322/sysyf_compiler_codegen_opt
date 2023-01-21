@@ -9,21 +9,16 @@ class Mem2Reg : public Pass {
   private:
     Function *func_;
     IRBuilder *builder;
-    std::map<BasicBlock *, std::vector<Value *>> define_var;
     const std::string name = "Mem2Reg";
-    std::map<Value *, Value *> lvalue_connection;
-    std::set<Value *> no_union_set;
 
   public:
     explicit Mem2Reg(Module *m) : Pass(m) {}
     ~Mem2Reg() = default;
     void execute() final;
-    void genPhi(); // 生成φ函数
+    void genPhi();
     void insideBlockForwarding();
-    void valueDefineCounting();
     void valueForwarding(BasicBlock *bb);
     void removeAlloc();
-    void phiStatistic();
     [[nodiscard]] std::string get_name() const override { return name; }
 
     static bool isVarOp(Instruction *inst, bool includeGlobal = false) {
@@ -40,6 +35,22 @@ class Mem2Reg : public Pass {
             isVar &= dynamic_cast<GlobalVariable *>(lvalue) == nullptr;
         }
         return isVar;
+    }
+
+    static std::vector<Value *> collectValueDefine(BasicBlock *bb) {
+        auto define_var = std::vector<Value *>{};
+        for (auto *inst : bb->get_instructions()) {
+            if (inst->is_phi()) {
+                auto *lvalue = dynamic_cast<PhiInst *>(inst)->get_lval();
+                define_var.push_back(lvalue);
+            } else if (inst->is_store()) {
+                if (!isVarOp(inst))
+                    continue;
+                auto *lvalue = dynamic_cast<StoreInst *>(inst)->get_lval();
+                define_var.push_back(lvalue);
+            }
+        }
+        return define_var;
     }
 };
 
