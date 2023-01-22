@@ -106,6 +106,10 @@ int main(int argc, char *argv[]) {
                 passmgr.addPass<Check>();
             }
 
+            if (cse) {
+                passmgr.addPass<CSE>();
+                passmgr.addPass<Check>();
+            }
             if (sccp) {
                 passmgr.addPass<SCCP>();
                 passmgr.addPass<Check>();

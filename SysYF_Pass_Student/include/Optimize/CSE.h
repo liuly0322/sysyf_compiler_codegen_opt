@@ -80,6 +80,7 @@ class CSE : public Pass {
     std::map<BasicBlock *, std::vector<bool>> OUT;
     std::vector<Expression> available;
     std::vector<Instruction *> delete_list;
+    std::vector<std::pair<Instruction *, Value *>> forwarded_load;
     const std::string name = "CSE";
 
   public:
@@ -91,6 +92,8 @@ class CSE : public Pass {
                                  std::vector<Instruction *> &insts, int index);
     static bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
                        unsigned index);
+    void forward_store();
+    void delete_forward();
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
     void calcGenKill(Function *fun);

@@ -8,8 +8,40 @@ using PureFunction::global_var_store_effects;
 using PureFunction::is_pure;
 using PureFunction::markPure;
 
+void CSE::forward_store() {
+    auto store_insts = std::vector<std::list<Instruction *>::iterator>{};
+    for (auto *fun : module->get_functions()) {
+        for (auto *bb : fun->get_basic_blocks()) {
+            auto &insts = bb->get_instructions();
+            for (auto iter = insts.begin(); iter != insts.end(); iter++) {
+                if ((*iter)->is_store())
+                    store_insts.push_back(iter);
+            }
+        }
+    }
+    for (auto iter : store_insts) {
+        auto *store_inst = static_cast<StoreInst *>(*iter);
+        auto *bb = store_inst->get_parent();
+        auto *lval = store_inst->get_lval();
+        auto *rval = store_inst->get_rval();
+        auto *type = rval->get_type();
+        auto *load_inst = LoadInst::create_load(type, lval, bb);
+        bb->get_instructions().pop_back();
+        bb->add_instruction(++iter, load_inst);
+        forwarded_load.emplace_back(load_inst, rval);
+    }
+}
+
+void CSE::delete_forward() {
+    for (auto &[load_inst, value] : forwarded_load) {
+        load_inst->replace_all_use_with(value);
+        load_inst->get_parent()->delete_instr(load_inst);
+    }
+}
+
 void CSE::execute() {
     markPure(module);
+    forward_store();
     for (auto *fun : module->get_functions()) {
         if (fun->get_basic_blocks().empty()) {
             continue;
@@ -19,6 +51,7 @@ void CSE::execute() {
             globalCSE(fun);
         } while (!delete_list.empty());
     }
+    delete_forward();
 }
 
 Value *CSE::findOrigin(Value *val) {
@@ -44,9 +77,13 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     // 1. argument or global array
     if (isArgOrGlobalArrayOp(lval_load, target_load)) {
         if (inst2->is_store()) {
-            // if inst2 is also argument or global array store
             auto *lval_store = inst2->get_operand(1);
             auto *target_store = findOrigin(lval_store);
+            // if both global
+            if (dynamic_cast<GlobalVariable *>(target_load) != nullptr &&
+                dynamic_cast<GlobalVariable *>(target_store) != nullptr)
+                return target_load == target_store;
+            // else any global/arg store erase load inst
             return isArgOrGlobalArrayOp(lval_store, target_store);
         }
         if (inst2->is_call()) {
@@ -249,19 +286,10 @@ void CSE::findSource(Function *fun) {
                 std::find(available.begin(), available.end(), Expression(inst));
             auto index = it - available.begin();
             auto &expr = *it;
-            if (expr.source.count(inst) && inst->is_load()) {
-                if (isKill(inst, insts, i)) {
-                    expr.source.erase(inst);
-                    continue;
-                }
-            }
-            if (expr.source.count(inst) == 0) {
-                if (inst->is_load() && isKill(inst, insts, i)) {
-                    continue;
-                }
-                if (!IN[bb][index] && GEN[bb][index]) {
-                    expr.source.insert(inst);
-                }
+            if (inst->is_load() && isKill(inst, insts, i)) {
+                expr.source.erase(inst);
+            } else if ((!IN[bb][index] || KILL[bb][index]) && GEN[bb][index]) {
+                expr.source.insert(inst);
             }
         }
     }

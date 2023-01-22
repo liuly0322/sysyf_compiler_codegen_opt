@@ -25,14 +25,7 @@ void Mem2Reg::insideBlockForwarding() {
         const auto insts = std::vector<Instruction *>{
             bb->get_instructions().begin(), bb->get_instructions().end()};
         for (auto *inst : insts) {
-            // 非纯函数调用将注销所有受影响全局变量的定值
-            if (inst->is_call()) {
-                auto *callee = static_cast<Function *>(inst->get_operand(0));
-                for (auto *var : global_var_store_effects[callee])
-                    defined_list.erase(var);
-            }
-
-            if (!isVarOp(inst, true))
+            if (!isLocalVarOp(inst))
                 continue;
 
             if (auto *store_inst = dynamic_cast<StoreInst *>(inst)) {
@@ -58,7 +51,7 @@ void Mem2Reg::genPhi() {
 
     for (auto *bb : func_->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
-            if (!isVarOp(inst))
+            if (!isLocalVarOp(inst))
                 continue;
 
             if (inst->is_load()) {
@@ -110,7 +103,7 @@ void Mem2Reg::valueForwarding(BasicBlock *bb) {
     }
 
     for (auto *inst : bb->get_instructions()) {
-        if (!isVarOp(inst))
+        if (!isLocalVarOp(inst))
             continue;
         // 传播，用地址定值替换不必要的 load 和 store
         if (inst->is_load()) {
