@@ -195,10 +195,8 @@ void CSE::calcGenKill(Function *fun) {
             if (!isOptmized(inst)) {
                 continue;
             }
-            if (inst->is_load()) {
-                if (isKill(inst, insts, i)) {
-                    continue;
-                }
+            if (inst->is_load() && isKill(inst, insts, i)) {
+                continue;
             }
             auto index = std::find(available.begin(), available.end(),
                                    Expression(inst)) -
@@ -295,31 +293,41 @@ void CSE::findSource(Function *fun) {
     }
 }
 
-BasicBlock *traverse(BasicBlock *curbb, BasicBlock *dstbb, BasicBlock *prebb,
-                     std::set<BasicBlock *> &visited, bool flag) {
-    if (visited.count(curbb)) {
-        return nullptr;
+/**
+ * @brief 已知 bb 入口可用表达式
+ *        如果源头唯一，则返回源头，否则返回空指针
+ * @param bb 当前基本块
+ * @param source 可用表达式源头
+ * @return Instruction* 源头
+ */
+Instruction *findReplacement(BasicBlock *bb, std::set<Instruction *> &source) {
+    auto source_map = std::map<BasicBlock *, Instruction *>{};
+    for (auto *inst : source) {
+        auto *source_bb = inst->get_parent();
+        source_map[source_bb] = inst;
     }
-    if (flag) {
-        visited.insert(curbb);
-    }
-    if (flag && curbb == dstbb) {
-        return prebb;
-    }
-    prebb = curbb;
-    for (auto *succ_bb : curbb->get_succ_basic_blocks()) {
-        auto *ret = traverse(succ_bb, dstbb, prebb, visited, true);
-        if (ret != nullptr) {
-            return ret;
+
+    auto arrived = std::set<BasicBlock *>{};
+    for (auto &[source_bb, inst] : source_map) {
+        auto worklist = std::vector<BasicBlock *>{source_bb};
+        auto visited = std::set<BasicBlock *>{};
+        for (auto i = 0U; i < worklist.size(); i++) {
+            auto *cur_bb = worklist[i];
+            if (visited.count(cur_bb) != 0)
+                continue;
+            visited.insert(cur_bb);
+            if (cur_bb == bb) {
+                arrived.insert(source_bb);
+                break;
+            }
+            for (auto *succ : cur_bb->get_succ_basic_blocks()) {
+                if (source_map.count(succ) != 0)
+                    continue;
+                worklist.push_back(succ);
+            }
         }
     }
-    return nullptr;
-}
-
-BasicBlock *CSE::isReach(BasicBlock *bb, Instruction *inst) {
-    auto *curbb = inst->get_parent();
-    std::set<BasicBlock *> visited;
-    return traverse(curbb, bb, curbb, visited, false);
+    return arrived.size() == 1 ? source_map[*arrived.begin()] : nullptr;
 }
 
 void CSE::replaceSubExpr(Function *fun) {
@@ -335,24 +343,9 @@ void CSE::replaceSubExpr(Function *fun) {
             if (!IN[bb][index] || KILL[bb][index] || expr.source.count(inst)) {
                 continue;
             }
-            if (expr.source.size() == 1) {
-                auto *repInst = *expr.source.begin();
+            if (auto *rep_inst = findReplacement(bb, expr.source)) {
                 delete_list.push_back(inst);
-                inst->replace_all_use_with(repInst);
-            } else {
-                std::vector<std::pair<Instruction *, BasicBlock *>> vec;
-                for (auto *instr : expr.source) {
-                    auto *srcbb = isReach(bb, instr);
-                    if (srcbb != nullptr) {
-                        vec.emplace_back(instr, srcbb);
-                    }
-                }
-                if (vec.size() == 1) {
-                    delete_list.push_back(inst);
-                    auto *repInst = (*vec.begin()).first;
-                    inst->replace_all_use_with(repInst);
-                    continue;
-                }
+                inst->replace_all_use_with(rep_inst);
             }
         }
     }

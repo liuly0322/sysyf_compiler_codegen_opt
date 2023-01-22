@@ -101,7 +101,6 @@ class CSE : public Pass {
     void findSource(Function *fun);
     void replaceSubExpr(Function *fun);
     void delete_instr();
-    static BasicBlock *isReach(BasicBlock *bb, Instruction *inst);
 
     [[nodiscard]] std::string get_name() const override { return name; }
     static bool isOptmized(Instruction *inst) {

@@ -21,7 +21,7 @@ class Mem2Reg : public Pass {
     void removeAlloc();
     [[nodiscard]] std::string get_name() const override { return name; }
 
-    static bool isLocalVarOp(Instruction *inst) {
+    static bool isVarOp(Instruction *inst, bool includeGlobal = false) {
         Value *lvalue{};
         if (inst->is_store()) {
             lvalue = static_cast<StoreInst *>(inst)->get_lval();
@@ -30,8 +30,11 @@ class Mem2Reg : public Pass {
         } else {
             return false;
         }
-        return dynamic_cast<GetElementPtrInst *>(lvalue) == nullptr &&
-               dynamic_cast<GlobalVariable *>(lvalue) == nullptr;
+        auto isVar = dynamic_cast<GetElementPtrInst *>(lvalue) == nullptr;
+        if (!includeGlobal) {
+            isVar &= dynamic_cast<GlobalVariable *>(lvalue) == nullptr;
+        }
+        return isVar;
     }
 
     static std::vector<Value *> collectValueDefine(BasicBlock *bb) {
@@ -41,7 +44,7 @@ class Mem2Reg : public Pass {
                 auto *lvalue = dynamic_cast<PhiInst *>(inst)->get_lval();
                 define_var.push_back(lvalue);
             } else if (inst->is_store()) {
-                if (!isLocalVarOp(inst))
+                if (!isVarOp(inst))
                     continue;
                 auto *lvalue = dynamic_cast<StoreInst *>(inst)->get_lval();
                 define_var.push_back(lvalue);
