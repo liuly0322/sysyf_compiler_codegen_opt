@@ -41,6 +41,7 @@ bool markPureInside(Function *f) {
 
 void markPure(Module *module) {
     is_pure.clear();
+    global_var_store_effects.clear();
     auto functions = module->get_functions();
     std::vector<Function *> work_list;
 

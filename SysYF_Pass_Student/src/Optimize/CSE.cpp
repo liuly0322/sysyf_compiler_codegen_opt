@@ -43,9 +43,8 @@ void CSE::execute() {
     markPure(module);
     forward_store();
     for (auto *fun : module->get_functions()) {
-        if (fun->get_basic_blocks().empty()) {
+        if (fun->is_declaration())
             continue;
-        }
         do {
             localCSE(fun);
             globalCSE(fun);
@@ -56,9 +55,8 @@ void CSE::execute() {
 
 Value *CSE::findOrigin(Value *val) {
     Value *lval_runner = val;
-    while (auto *gep_inst = dynamic_cast<GetElementPtrInst *>(lval_runner)) {
+    while (auto *gep_inst = dynamic_cast<GetElementPtrInst *>(lval_runner))
         lval_runner = gep_inst->get_operand(0);
-    }
     // GlobalVariable or Argument or AllocaInst
     return lval_runner;
 }
@@ -93,9 +91,8 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
         return false;
     }
     // 2. local array or global variable
-    if (inst2->is_store()) {
+    if (inst2->is_store())
         return target_load == findOrigin(inst2->get_operand(1));
-    }
     if (inst2->is_call()) {
         auto *callee = static_cast<Function *>(inst2->get_operand(0));
         if (global_var_store_effects[callee].count(lval_load) != 0)
@@ -111,12 +108,10 @@ Instruction *CSE::isAppear(Instruction *inst, std::vector<Instruction *> &insts,
                            int index) {
     for (auto i = index - 1; i >= 0; --i) {
         auto *instr = insts[i];
-        if (cmp(inst, instr)) {
+        if (cmp(inst, instr))
             return nullptr;
-        }
-        if (Expression(inst) == Expression(instr)) {
+        if (Expression(inst) == Expression(instr))
             return instr;
-        }
     }
     return nullptr;
 }
@@ -126,14 +121,12 @@ void CSE::localCSE(Function *fun) {
         do {
             delete_list.clear();
             std::vector<Instruction *> insts;
-            for (auto *inst : bb->get_instructions()) {
+            for (auto *inst : bb->get_instructions())
                 insts.push_back(inst);
-            }
             for (auto i = 0U; i < insts.size(); ++i) {
                 auto *inst = insts[i];
-                if (!isOptmized(inst)) {
+                if (!isOptmized(inst))
                     continue;
-                }
                 auto *preInst = isAppear(inst, insts, i);
                 if (preInst != nullptr) {
                     delete_list.push_back(inst);
@@ -157,10 +150,9 @@ void CSE::globalCSE(Function *fun) {
 bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts,
                  unsigned index) {
     for (auto i = index + 1; i < insts.size(); ++i) {
-        auto instr = insts[i];
-        if (cmp(inst, instr)) {
+        auto *instr = insts[i];
+        if (cmp(inst, instr))
             return true;
-        }
     }
     return false;
 }
@@ -170,9 +162,8 @@ void CSE::calcGenKill(Function *fun) {
     available.clear();
     for (auto *bb : fun->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
-            if (!isOptmized(inst)) {
+            if (!isOptmized(inst))
                 continue;
-            }
             const Expression expr{inst};
             if (std::find(available.begin(), available.end(), expr) !=
                 available.end()) {
@@ -187,17 +178,13 @@ void CSE::calcGenKill(Function *fun) {
     for (auto *bb : fun->get_basic_blocks()) {
         std::vector<bool> gen(available.size(), false);
         std::vector<Instruction *> insts;
-        for (auto *inst : bb->get_instructions()) {
+        for (auto *inst : bb->get_instructions())
             insts.push_back(inst);
-        }
         for (auto i = 0U; i < insts.size(); ++i) {
             auto *inst = insts[i];
-            if (!isOptmized(inst)) {
+            if (!isOptmized(inst) ||
+                (inst->is_load() && isKill(inst, insts, i)))
                 continue;
-            }
-            if (inst->is_load() && isKill(inst, insts, i)) {
-                continue;
-            }
             auto index = std::find(available.begin(), available.end(),
                                    Expression(inst)) -
                          available.begin();
@@ -211,16 +198,13 @@ void CSE::calcGenKill(Function *fun) {
     for (auto *bb : fun->get_basic_blocks()) {
         std::vector<bool> kill(available.size(), false);
         for (auto *inst : bb->get_instructions()) {
-            if (inst->is_ret() || inst->is_br()) {
+            if (inst->is_ret() || inst->is_br())
                 continue;
-            }
             Value *target = inst;
             for (auto i = 0U; i < available.size(); ++i) {
-                if (available[i].inst->is_load()) {
-                    if (cmp(available[i].inst, inst)) {
-                        kill[i] = true;
-                    }
-                }
+                if (available[i].inst->is_load() &&
+                    cmp(available[i].inst, inst))
+                    kill[i] = true;
                 auto &operands = available[i].operands;
                 if (std::find(operands.begin(), operands.end(), target) !=
                     operands.end()) {
@@ -239,9 +223,8 @@ void CSE::calcInOut(Function *fun) {
     IN.clear();
     OUT.clear();
     IN.insert({fun->get_entry_block(), phi});
-    for (auto *bb : fun->get_basic_blocks()) {
+    for (auto *bb : fun->get_basic_blocks())
         OUT.insert({bb, U});
-    }
     bool changed = true;
     while (changed) {
         changed = false;
@@ -249,22 +232,18 @@ void CSE::calcInOut(Function *fun) {
             // calculate IN
             if (bb != fun->get_entry_block()) {
                 std::vector<bool> in(U);
-                for (auto *pre : bb->get_pre_basic_blocks()) {
-                    for (auto i = 0U; i < available.size(); i++) {
+                for (auto *pre : bb->get_pre_basic_blocks())
+                    for (auto i = 0U; i < available.size(); i++)
                         in[i] = in[i] && OUT[pre][i];
-                    }
-                }
                 IN.insert_or_assign(bb, in);
             }
 
             // calculate OUT
             const std::vector<bool> preOut = OUT[bb];
-            for (auto i = 0U; i < available.size(); ++i) {
+            for (auto i = 0U; i < available.size(); ++i)
                 OUT[bb][i] = GEN[bb][i] || (IN[bb][i] && !KILL[bb][i]);
-            }
-            if (preOut != OUT[bb]) {
+            if (preOut != OUT[bb])
                 changed = true;
-            }
         }
     }
 }
@@ -272,23 +251,20 @@ void CSE::calcInOut(Function *fun) {
 void CSE::findSource(Function *fun) {
     for (auto *bb : fun->get_basic_blocks()) {
         std::vector<Instruction *> insts;
-        for (auto *inst : bb->get_instructions()) {
+        for (auto *inst : bb->get_instructions())
             insts.push_back(inst);
-        }
         for (auto i = 0U; i < insts.size(); ++i) {
             auto *inst = insts[i];
-            if (!isOptmized(inst)) {
+            if (!isOptmized(inst))
                 continue;
-            }
             auto it =
                 std::find(available.begin(), available.end(), Expression(inst));
             auto index = it - available.begin();
-            auto &expr = *it;
-            if (inst->is_load() && isKill(inst, insts, i)) {
-                expr.source.erase(inst);
-            } else if ((!IN[bb][index] || KILL[bb][index]) && GEN[bb][index]) {
-                expr.source.insert(inst);
-            }
+            auto &source = it->source;
+            if (inst->is_load() && isKill(inst, insts, i))
+                source.erase(inst);
+            else if ((!IN[bb][index] || KILL[bb][index]) && GEN[bb][index])
+                source.insert(inst);
         }
     }
 }
@@ -333,17 +309,15 @@ Instruction *findReplacement(BasicBlock *bb, std::set<Instruction *> &source) {
 void CSE::replaceSubExpr(Function *fun) {
     for (auto *bb : fun->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
-            if (!isOptmized(inst)) {
+            if (!isOptmized(inst))
                 continue;
-            }
             auto it =
                 std::find(available.begin(), available.end(), Expression(inst));
-            auto &expr = *it;
             auto index = it - available.begin();
-            if (!IN[bb][index] || KILL[bb][index] || expr.source.count(inst)) {
+            auto &source = it->source;
+            if (!IN[bb][index] || KILL[bb][index] || source.count(inst) != 0)
                 continue;
-            }
-            if (auto *rep_inst = findReplacement(bb, expr.source)) {
+            if (auto *rep_inst = findReplacement(bb, source)) {
                 delete_list.push_back(inst);
                 inst->replace_all_use_with(rep_inst);
             }
@@ -353,7 +327,6 @@ void CSE::replaceSubExpr(Function *fun) {
 }
 
 void CSE::delete_instr() {
-    for (auto *inst : delete_list) {
+    for (auto *inst : delete_list)
         inst->get_parent()->delete_instr(inst);
-    }
 }
