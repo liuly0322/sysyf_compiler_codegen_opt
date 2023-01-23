@@ -133,7 +133,7 @@ def eval(EXE_PATH, TEST_BASE_PATH, optimization):
                 subprocess.call(["rm", "-rf", TEST_PATH, LL_PATH_OPT])
         else:
             dir_succ = False
-            print('case')
+            print(case)
             print('\tIRBuild Fail')
 
     if dir_succ:
