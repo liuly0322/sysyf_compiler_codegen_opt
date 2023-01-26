@@ -198,6 +198,15 @@ int main(){
     <pre id="output" class="column"><span class="placeholder">点击编译按钮，结果将在此处展示。。。</span></pre>
   </div>
   <script src="diff.min.js"></script>
+  <script>
+    let output_message = ''
+      ;
+    (() => {
+      const append_out = (str) => { output_message += str }
+      console.log = append_out
+      console.warn = append_out
+    })()
+  </script>
   <script src="compiler.js"></script>
   <script>
     const btn = document.getElementById('btn')
@@ -253,8 +262,7 @@ int main(){
       try {
         optimized = compile(sccp, cse, dce)
       } catch (e) {
-        console.log(e)
-        output.innerHTML = `<span class="placeholder">编译失败，打开控制台查看详细信息。编译器已退出，刷新页面以继续编译。</span>`
+        output.innerHTML = `<span class="placeholder">编译器出现错误，刷新页面以继续编译。\n${output_message}</span>`
         return
       }
 
