@@ -755,7 +755,6 @@ namespace yy {
     int yylen = 0;
 
     // Error handling.
-    int yynerrs_ = 0;
     int yyerrstatus_ = 0;
 
     /// The lookahead symbol.
@@ -1913,7 +1912,6 @@ yyla.location.begin.filename = yyla.location.end.filename = &driver.file;
     // If not already recovering from an error, report this error.
     if (!yyerrstatus_)
       {
-        ++yynerrs_;
         context yyctx (*this, yyla);
         std::string msg = yysyntax_error_ (yyctx);
         error (yyla.location, YY_MOVE (msg));

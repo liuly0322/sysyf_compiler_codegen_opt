@@ -68,6 +68,7 @@ struct Node {
     Position loc;
     // Used in Visitor. Irrelevant to syntax tree generation.
     virtual void accept(Visitor &visitor) = 0;
+    virtual ~Node() = default;
 };
 
 // node for initial value

@@ -179,7 +179,6 @@ class Instruction : public User {
     BasicBlock *parent_;
     OpID op_id_;
     int id_;
-    unsigned num_ops_;
 };
 
 class BinaryInst : public Instruction {

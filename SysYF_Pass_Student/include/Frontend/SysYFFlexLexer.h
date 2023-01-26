@@ -32,6 +32,10 @@ class SysYFFlexLexer : public yyFlexLexer {
     // linkage at translation unit scope, not in the sense of being a
     // class variable):
     yy::location loc;
+
+  private:
+    // intend to override virtual
+    using yyFlexLexer::yylex;
 };
 
 #endif // _SYSYF_FLEX_LEXER_H_

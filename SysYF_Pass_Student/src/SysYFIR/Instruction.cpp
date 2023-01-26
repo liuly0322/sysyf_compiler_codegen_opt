@@ -9,12 +9,12 @@
 
 Instruction::Instruction(Type *ty, OpID id, unsigned num_ops,
                          BasicBlock *parent)
-    : User(ty, "", num_ops), parent_(parent), op_id_(id), num_ops_(num_ops) {
+    : User(ty, "", num_ops), parent_(parent), op_id_(id) {
     parent_->add_instruction(this);
 }
 
 Instruction::Instruction(Type *ty, OpID id, unsigned num_ops)
-    : User(ty, "", num_ops), parent_(nullptr), op_id_(id), num_ops_(num_ops) {}
+    : User(ty, "", num_ops), parent_(nullptr), op_id_(id) {}
 
 Function *Instruction::get_function() { return parent_->get_parent(); }
 

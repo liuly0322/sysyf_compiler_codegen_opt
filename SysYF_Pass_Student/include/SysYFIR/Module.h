@@ -33,7 +33,7 @@ class Module {
     void set_print_name();
     void set_file_name(std::string name) { source_file_name_ = name; }
     std::string get_file_name() { return source_file_name_; }
-    virtual std::string print();
+    std::string print();
 
   private:
     std::list<GlobalVariable *>

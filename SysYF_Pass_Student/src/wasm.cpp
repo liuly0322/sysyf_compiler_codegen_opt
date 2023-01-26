@@ -64,5 +64,3 @@ const char *compile(const char *str, int sccp, int cse, int dce) {
     return result.c_str();
 }
 }
-
-int main() { return 0; }

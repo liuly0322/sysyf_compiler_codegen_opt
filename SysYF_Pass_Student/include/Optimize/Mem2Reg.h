@@ -1,14 +1,12 @@
 #ifndef SYSYF_MEM2REG_H
 #define SYSYF_MEM2REG_H
 
-#include "IRBuilder.h"
 #include "Pass.h"
 #include "PureFunction.h"
 
 class Mem2Reg : public Pass {
   private:
     Function *func_;
-    IRBuilder *builder;
     const std::string name = "Mem2Reg";
 
   public:
