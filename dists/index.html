@@ -44,20 +44,20 @@
     box-shadow: inset 0 2px 5px #2370FE;
   }
 
-  pre {
+  #output {
     white-space: pre-wrap;
     background-color: #eee;
     height: calc(100vh - 3.5em);
     overflow: auto
   }
 
-  del {
+  #output>del {
     text-decoration: none;
     color: #b30000;
     background: #fadad7;
   }
 
-  ins {
+  #output>ins {
     background: #eaf2c2;
     color: #406619;
     text-decoration: none;
@@ -116,7 +116,13 @@
     <div class="column">
       <div class="header">
         <h1>SysYF IR Opt</h1>
-        <p><a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt">GitHub 链接</a></p>
+        <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt" target="_blank"
+          style="color: black; text-decoration: none;"><svg width="1.2em" height="1.2em"
+            preserveAspectRatio="xMidYMid meet" viewBox="0 0 1024 1024" style="font-size: xx-large;">
+            <path fill="currentColor"
+              d="M511.6 76.3C264.3 76.2 64 276.4 64 523.5C64 718.9 189.3 885 363.8 946c23.5 5.9 19.9-10.8 19.9-22.2v-77.5c-135.7 15.9-141.2-73.9-150.3-88.9C215 726 171.5 718 184.5 703c30.9-15.9 62.4 4 98.9 57.9c26.4 39.1 77.9 32.5 104 26c5.7-23.5 17.9-44.5 34.7-60.8c-140.6-25.2-199.2-111-199.2-213c0-49.5 16.3-95 48.3-131.7c-20.4-60.5 1.9-112.3 4.9-120c58.1-5.2 118.5 41.6 123.2 45.3c33-8.9 70.7-13.6 112.9-13.6c42.4 0 80.2 4.9 113.5 13.9c11.3-8.6 67.3-48.8 121.3-43.9c2.9 7.7 24.7 58.3 5.5 118c32.4 36.8 48.9 82.7 48.9 132.3c0 102.2-59 188.1-200 212.9a127.5 127.5 0 0 1 38.1 91v112.5c.8 9 0 17.9 15 17.9c177.1-59.7 304.6-227 304.6-424.1c0-247.2-200.4-447.3-447.5-447.3z">
+            </path>
+          </svg></a>
       </div>
       <p id="hint" style="color:#0095d9;">正在加载 wasm（部分设备可能不支持）。。。</p>
       <blockquote>
@@ -194,92 +200,80 @@ int main(){
   <script src="diff.min.js"></script>
   <script src="compiler.js"></script>
   <script>
-    const btn = document.getElementById("btn");
-    const output = document.getElementById('output');
+    const btn = document.getElementById('btn')
+    const output = document.getElementById('output')
 
     function compile(sccp, cse, dce) {
-      const str = document.getElementById("sy_code").value;
+      const str = document.getElementById('sy_code').value
 
-      const strBuffer = new TextEncoder().encode(str);
-      const strPointer = Module._malloc(strBuffer.length + 1);
-      Module.HEAPU8.set(strBuffer, strPointer);
-      Module.HEAPU8[strPointer + strBuffer.length] = 0;
+      const strBuffer = new TextEncoder().encode(str)
+      const strPointer = Module._malloc(strBuffer.length + 1)
+      Module.HEAPU8.set(strBuffer, strPointer)
+      Module.HEAPU8[strPointer + strBuffer.length] = 0
 
-      const outPointer = Module._compile(strPointer, sccp, cse, dce);
+      const outPointer = Module._compile(strPointer, sccp, cse, dce)
 
-      Module._free(strPointer);
+      Module._free(strPointer)
 
-      let p = outPointer;
-      while (Module.HEAPU8[p] !== 0) {
-        ++p;
-      }
-      const outBuffer = new Uint8Array(
-        Module.HEAPU8.buffer,
-        outPointer,
-        p - outPointer - 1
-      );
-      return new TextDecoder().decode(outBuffer);
+      return UTF8ToString(outPointer)
     }
 
     function render(unoptimized, optimized) {
-      const diff = Diff.diffLines(unoptimized, optimized);
-      const fragment = document.createDocumentFragment();
+      const diff = Diff.diffLines(unoptimized, optimized)
+      const fragment = document.createDocumentFragment()
       for (let i = 0; i < diff.length; i++) {
-
-        if (diff[i].added && diff[i + 1] && diff[i + 1].removed) {
-          let swap = diff[i];
-          diff[i] = diff[i + 1];
-          diff[i + 1] = swap;
+        if (diff[i].added && diff[i + 1]?.removed) {
+          [diff[i], diff[i + 1]] = [diff[i + 1], diff[i]]
         }
 
-        let node;
+        let node
         if (diff[i].removed) {
-          node = document.createElement('del');
-          node.appendChild(document.createTextNode(diff[i].value));
+          node = document.createElement('del')
+          node.appendChild(document.createTextNode(diff[i].value))
         } else if (diff[i].added) {
-          node = document.createElement('ins');
-          node.appendChild(document.createTextNode(diff[i].value));
+          node = document.createElement('ins')
+          node.appendChild(document.createTextNode(diff[i].value))
         } else {
-          node = document.createTextNode(diff[i].value);
+          node = document.createTextNode(diff[i].value)
         }
-        fragment.appendChild(node);
+        fragment.appendChild(node)
       }
 
-      output.textContent = '';
-      output.appendChild(fragment);
+      output.textContent = ''
+      output.appendChild(fragment)
     }
 
     function btnClick() {
-      btn.disabled = true;
-      const sccp = Number(document.getElementById("sccp").checked);
-      const cse = Number(document.getElementById("cse").checked);
-      const dce = Number(document.getElementById("dce").checked);
+      btn.disabled = true
+      const sccp = Number(document.getElementById('sccp').checked)
+      const cse = Number(document.getElementById('cse').checked)
+      const dce = Number(document.getElementById('dce').checked)
 
-      let optimized;
+      let optimized
       try {
-        optimized = compile(sccp, cse, dce);
+        optimized = compile(sccp, cse, dce)
       } catch (e) {
-        console.log(e);
-        output.innerHTML = `<span class="placeholder">编译失败，打开控制台查看详细信息。编译器已退出，刷新页面以继续编译。</span>`;
-        return;
+        console.log(e)
+        output.innerHTML = `<span class="placeholder">编译失败，打开控制台查看详细信息。编译器已退出，刷新页面以继续编译。</span>`
+        return
       }
 
-      const diff = document.getElementById("diff").checked
+      const diff = document.getElementById('diff').checked
       if (diff) {
-        const unoptimized = compile(0, 0, 0);
+        const unoptimized = compile(0, 0, 0)
         render(unoptimized, optimized)
       } else {
-        output.innerText = optimized;
+        output.innerText = optimized
       }
 
-      btn.disabled = false;
+      btn.disabled = false
     }
 
     Module.onRuntimeInitialized = () => {
-      const hint = document.getElementById("hint");
-      hint.parentNode.removeChild(hint);
-      btn.disabled = false;
-    };
+      const hint = document.getElementById('hint')
+      hint.parentNode.removeChild(hint)
+      btn.disabled = false
+    }
   </script>
 </body>
 
