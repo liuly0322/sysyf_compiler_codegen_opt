@@ -28,8 +28,13 @@ ConstantFloat *ConstantFloat::get(float val, Module *m) {
 std::string ConstantFloat::print() {
     std::stringstream fp_ir_ss;
     std::string fp_ir;
-    double val = this->get_value();
-    fp_ir_ss << "0x" << std::hex << *(uint64_t *)&val << std::endl;
+    // assumes sizeof(double) == sizeof(uint64_t)
+    union {
+        double f;
+        uint64_t i;
+    } u;
+    u.f = value_;
+    fp_ir_ss << "0x" << std::hex << u.i << std::endl;
     fp_ir_ss >> fp_ir;
     return fp_ir;
 }
@@ -66,7 +71,7 @@ std::string ConstantArray::print() {
     return const_ir;
 }
 
-ConstantZero *ConstantZero::get(Type *ty, Module *m) {
+ConstantZero *ConstantZero::get(Type *ty, Module * /*m*/) {
     return new ConstantZero(ty);
 }
 
