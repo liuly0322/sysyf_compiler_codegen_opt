@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SysYF-Compiler-CodeGenOpt</title>
+</head>
+<style>
+  blockquote {
+    margin: 16px 0;
+    border-left: 2px solid #ccc;
+    padding-left: 16px;
+    transition: border-color 0.5s;
+  }
+
+  blockquote>p {
+    margin: 1em 0;
+    font-size: 16px;
+    color: rgba(60, 60, 60, 0.7);
+    transition: color 0.5s;
+  }
+
+  button {
+    padding: 5px 10px;
+    border-radius: 2px;
+    font-weight: bold;
+    font-size: 9pt;
+    outline: none;
+    color: white;
+    background: #4C8FFB;
+    border: 1px #3079ED solid;
+    box-shadow: inset 0 1px 0 #80B0FB;
+  }
+
+  button:hover {
+    border: 1px #2F5BB7 solid;
+    box-shadow: 0 1px 1px #EAEAEA, inset 0 1px 0 #5A94F1;
+    background: #3F83F1;
+  }
+
+  button:active {
+    box-shadow: inset 0 2px 5px #2370FE;
+  }
+
+  pre {
+    white-space: pre-wrap;
+    background-color: #eee;
+    height: calc(100vh - 3.5em);
+    overflow: auto
+  }
+
+  del {
+    text-decoration: none;
+    color: #b30000;
+    background: #fadad7;
+  }
+
+  ins {
+    background: #eaf2c2;
+    color: #406619;
+    text-decoration: none;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+  }
+
+  .container {
+    width: 992px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .opt {
+    display: inline-block;
+  }
+
+  .placeholder {
+    color: rgba(60, 60, 60, 0.7);
+  }
+
+  @media screen and (min-width: 992px) {
+    .body {
+      display: block;
+    }
+
+    .container {
+      columns: 2;
+      width: 100%;
+    }
+
+    .column {
+      break-inside: avoid;
+      margin: 0 1em;
+    }
+
+    pre {
+      padding: 1em;
+    }
+
+    textarea {
+      height: calc(100vh - 30em);
+    }
+  }
+</style>
+
+<body>
+  <div class="container">
+    <div class="column">
+      <div class="header">
+        <h1>SysYF IR Opt</h1>
+        <p><a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt">GitHub 链接</a></p>
+      </div>
+      <p id="hint" style="color:#0095d9;">正在加载 wasm（部分设备可能不支持）。。。</p>
+      <blockquote>
+        <p>
+          SysYF 语言是 C 语言的一个子集，只有一维数组，没有指针，没有 for 语句。
+        </p>
+        <p>本页面基于 WebAssembly，在浏览器端展示对 SysYF 语言前端生成的 LLVM IR 的优化效果。</p>
+      </blockquote>
+      <fieldset style="margin: 1em 0;">
+        <legend>选择开启的优化：</legend>
+        <div class="opt">
+          <input type="checkbox" id="sccp" name="sccp" checked />
+          <label for="scales">稀疏条件常量传播</label>
+        </div>
+        <div class="opt">
+          <input type="checkbox" id="cse" name="cse" checked />
+          <label for="horns">公共子表达式删除</label>
+        </div>
+        <div class="opt">
+          <input type="checkbox" id="dce" name="dce" checked />
+          <label for="horns">死代码消除</label>
+        </div>
+      </fieldset>
+      <textarea name="sy_code" id="sy_code" rows="20" style="width: 100%; margin: 1em 0;">
+// n = 10
+const int n = 1 + 2 + 3 + 4;
+int bubblesort(int arr[])
+{
+    int i;
+    int j;
+    i = 0; 
+    while(i &lt; n-1){
+    // Last i elements are already in place
+        j = 0;
+        while(j &lt; n-i-1){
+            if (arr[j] &gt; arr[j+1]) {
+                // swap(&amp;arr[j], &amp;arr[j+1]); 
+                int tmp;
+                tmp = arr[j+1];
+                arr[j+1] = arr[j];
+                arr[j] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+int main(){
+    // n is const
+    int a[n];
+    a[0]=4;a[1]=3;a[2]=9;a[3]=2;a[4]=0;
+    a[5]=1;a[6]=6;a[7]=5;a[8]=7;a[9]=8;
+    int i;
+    i = bubblesort(a);
+    while (i &lt; n) {
+        int tmp;
+        tmp = a[i];
+        putint(tmp);
+        tmp = 10;
+        putch(tmp);
+        i = i + 1;
+    }
+    return 0;
+}
+      </textarea>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div>展示差别：<input type="checkbox" name="diff" id="diff" checked></div>
+        <button id="btn" onclick="btnClick()" disabled="true">编译</button>
+      </div>
+    </div>
+    <pre id="output" class="column"><span class="placeholder">点击编译按钮，结果将在此处展示。。。</span></pre>
+  </div>
+  <script src="diff.min.js"></script>
+  <script src="compiler.js"></script>
+  <script>
+    const btn = document.getElementById("btn");
+    const output = document.getElementById('output');
+
+    function compile(sccp, cse, dce) {
+      const str = document.getElementById("sy_code").value;
+
+      const strBuffer = new TextEncoder().encode(str);
+      const strPointer = Module._malloc(strBuffer.length + 1);
+      Module.HEAPU8.set(strBuffer, strPointer);
+      Module.HEAPU8[strPointer + strBuffer.length] = 0;
+
+      const outPointer = Module._compile(strPointer, sccp, cse, dce);
+
+      Module._free(strPointer);
+
+      let p = outPointer;
+      while (Module.HEAPU8[p] !== 0) {
+        ++p;
+      }
+      const outBuffer = new Uint8Array(
+        Module.HEAPU8.buffer,
+        outPointer,
+        p - outPointer - 1
+      );
+      return new TextDecoder().decode(outBuffer);
+    }
+
+    function render(unoptimized, optimized) {
+      const diff = Diff.diffLines(unoptimized, optimized);
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < diff.length; i++) {
+
+        if (diff[i].added && diff[i + 1] && diff[i + 1].removed) {
+          let swap = diff[i];
+          diff[i] = diff[i + 1];
+          diff[i + 1] = swap;
+        }
+
+        let node;
+        if (diff[i].removed) {
+          node = document.createElement('del');
+          node.appendChild(document.createTextNode(diff[i].value));
+        } else if (diff[i].added) {
+          node = document.createElement('ins');
+          node.appendChild(document.createTextNode(diff[i].value));
+        } else {
+          node = document.createTextNode(diff[i].value);
+        }
+        fragment.appendChild(node);
+      }
+
+      output.textContent = '';
+      output.appendChild(fragment);
+    }
+
+    function btnClick() {
+      btn.disabled = true;
+      const sccp = Number(document.getElementById("sccp").checked);
+      const cse = Number(document.getElementById("cse").checked);
+      const dce = Number(document.getElementById("dce").checked);
+
+      let optimized;
+      try {
+        optimized = compile(sccp, cse, dce);
+      } catch (e) {
+        console.log(e);
+        output.innerHTML = `<span class="placeholder">编译失败，打开控制台查看详细信息。编译器已退出，刷新页面以继续编译。</span>`;
+        return;
+      }
+
+      const diff = document.getElementById("diff").checked
+      if (diff) {
+        const unoptimized = compile(0, 0, 0);
+        render(unoptimized, optimized)
+      } else {
+        output.innerText = optimized;
+      }
+
+      btn.disabled = false;
+    }
+
+    Module.onRuntimeInitialized = () => {
+      const hint = document.getElementById("hint");
+      hint.parentNode.removeChild(hint);
+      btn.disabled = false;
+    };
+  </script>
+</body>
+
+</html>

@@ -22,7 +22,7 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
 - 公共子表达式消除
 - 死代码消除
 
-使用 WASM 构建了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。如果对 WASM 感兴趣可以看本仓库的 wasm 分支及 static 分支，分别存放了构建文件和静态网页。
+使用 WASM 构建了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。如果对 WASM 感兴趣可以参考本仓库的 GitHub Actions 以及 CMakeLists.txt。
 
 具体实现上：
 
@@ -38,7 +38,7 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
   - 支持控制流简化
   - 支持不可达基本块删除
 
-使用 _GitHub Actions_ 进行自动 CI 测试，使用 _ClangFormat_ 格式化项目代码风格。
+使用 _GitHub Actions_ 进行自动测试及网页更新，使用 _ClangFormat_ 格式化项目代码风格。
 
 原先的实验文档见 [实验文档](./doc.md)。
 
