@@ -6,8 +6,8 @@
 
 <p align="center">
 
-  <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/opt.yml">
-    <img src="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/opt.yml/badge.svg">
+  <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml">
+    <img src="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml/badge.svg">
   </a>
 
 </p>
