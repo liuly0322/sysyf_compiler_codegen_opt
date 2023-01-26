@@ -1,12 +1,27 @@
-project(SysYFCompiler)
-
 cmake_minimum_required(VERSION 3.5)
 
+project(SysYFCompiler)
+
 set(CMAKE_CXX_STANDARD 17)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -Wall -g -pedantic")
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No build type selected, default to Release")
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+option(BUILD_WASM "Build WASM output files" OFF)
+
+if(BUILD_WASM)
+  # WASM with -Oz
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Oz -Wall -pedantic")
+elseif(NOT "${CMAKE_BUILD_TYPE}" MATCHES "Debug")
+  # release mode with -O2
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -Wall -pedantic")
+else()
+  # debug mode wich -O0 and -g
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -Wall -g -pedantic")
+endif()
 
 # add macros to generate Bison & Flex Cpp code from grammar
 # find_package(BISON REQUIRED)
@@ -42,29 +57,41 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/SysYFIRBuilder)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/Optimize)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/Log)
 
-add_executable(
-        compiler
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
-)
-
-target_link_libraries(
-        compiler
-        SysYFPass
-        SysYFIRBuilder
-        IRLib
-        Driver
-        Checker
-        ASTPrinter
-        ErrReporter
-        Log
-)
-
-add_executable(
-        test_logging
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Log/test_logging.cpp
-)
-
-target_link_libraries(
-        test_logging
-        Log
-)
+if(BUILD_WASM)
+  add_executable(
+    compiler
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/wasm.cpp
+  )
+  target_link_options(compiler PRIVATE -sEXPORTED_FUNCTIONS=[_compile,_malloc,_free])
+  target_link_libraries(
+    compiler
+    SysYFPass
+    SysYFIRBuilder
+    IRLib
+    Driver
+  )
+else()
+  add_executable(
+    compiler
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+  )
+  target_link_libraries(
+    compiler
+    SysYFPass
+    SysYFIRBuilder
+    IRLib
+    Driver
+    Checker
+    ASTPrinter
+    ErrReporter
+    Log
+  )
+  add_executable(
+    test_logging
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Log/test_logging.cpp
+  )
+  target_link_libraries(
+    test_logging
+    Log
+  )
+endif()
