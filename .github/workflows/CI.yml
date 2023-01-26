@@ -1,4 +1,4 @@
-name: Optimization Test
+name: Test & Push
 
 on:
   workflow_dispatch:
