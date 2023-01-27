@@ -33,10 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: |
-          sudo apt install clang cmake
-
       - name: Pull image
         run: |
           docker pull emscripten/emsdk
@@ -50,15 +46,15 @@ jobs:
             emscripten/emsdk \
             sh build_wasm.sh
 
-      - name: collect dists
+      - name: collect static files
         run: |
-          cp SysYF_Pass_Student/build/compiler.js dists/ && \
-          cp SysYF_Pass_Student/build/compiler.wasm dists/
+          cp SysYF_Pass_Student/build/compiler.js static/ && \
+          cp SysYF_Pass_Student/build/compiler.wasm static/
 
       - name: Push
         uses: s0/git-publish-subdir-action@develop
         env:
           REPO: self
           BRANCH: static
-          FOLDER: dists
+          FOLDER: static
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

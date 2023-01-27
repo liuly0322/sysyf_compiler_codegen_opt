@@ -22,7 +22,7 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
 - 公共子表达式消除
 - 死代码消除
 
-使用 WASM 构建了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。如果对 WASM 感兴趣可以参考本仓库的 GitHub Actions 以及 CMakeLists.txt。
+使用 WASM 构建了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。具体见 [构建 WASM](#构建-WASM)。
 
 具体实现上：
 
@@ -62,12 +62,12 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
 
 ## 环境搭建
 
-以 ubuntu 平台为例：
+### 构建编译器
 
 ```shell
 # 安装 clang, cmake, python3
 sudo apt install build-essential clang cmake python3
-# 进入项目目录
+# 进入工作目录
 cd SysYF_Pass_Student
 # 编译该 cmake 项目
 mkdir build
@@ -75,8 +75,29 @@ cd build
 cmake ..
 # 多线程编译，如果单核环境可以去掉 -j
 make -j
-# 编译完成，生成可执行文件 compiler
+# 得到可执行文件 compiler
 ```
+
+### 构建 WASM
+
+```shell
+# 安装 docker
+sudo apt install docker
+# 拉取 emscripten 环境的 docker 镜像
+docker pull emscripten/emsdk
+# 进入工作目录
+cd SysYF_Pass_Student
+# 运行 docker 容器构建
+docker run \
+  --rm \
+  -v $(pwd):/src \
+  -u $(id -u):$(id -g) \
+  emscripten/emsdk \
+  sh build_wasm.sh
+# 得到 compiler.js 和 compiler.wasm
+```
+
+将 compiler.js 和 compiler.wasm 放置在项目目录下的 static 文件夹内即可。
 
 ## 运行说明
 
