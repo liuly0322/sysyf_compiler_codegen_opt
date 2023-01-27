@@ -14,15 +14,15 @@
 
 ## 简介
 
-SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编译系统设计赛要求实现的 SysY 语言基础上增加了 float 类型和元素类型为 float 的数组类型（[SysYF 语言定义](SysYF语言定义.pdf)）。
+SysYF 语言是 C 语言的一个精简子集（[SysYF 语言定义](SysYF语言定义.pdf)）。没有指针，没有 for 语句。本仓库的实现仅支持一维数组。
 
-本仓库是 2022 年中国科学技术大学编译原理 H 课程的实验项目，在提供的框架代码（已提供词法分析，语法分析，语义分析）基础上，主要完成了对中间代码（IR）的平台无关优化如下：
+作为 2022 年中国科学技术大学编译原理 H 课程的实验项目（原先的实验文档见 [实验文档](./doc.md)），在提供的框架代码（已提供词法分析，语法分析，语义分析）基础上，主要完成了对中间代码（IR）的平台无关优化如下：
 
 - 稀疏条件常量传播
 - 公共子表达式消除
 - 死代码消除
 
-使用 WASM 构建了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。具体见 [构建 WASM](#构建-WASM)。
+使用 WASM [构建](#构建-WASM) 了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。配合 _GitHub Actions_ 实现项目的持续集成（自动测试及网页更新）。
 
 具体实现上：
 
@@ -38,10 +38,6 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
   - 支持控制流简化
   - 支持不可达基本块删除
 
-使用 _GitHub Actions_ 进行自动测试及网页更新，使用 _ClangFormat_ 格式化项目代码风格。
-
-原先的实验文档见 [实验文档](./doc.md)。
-
 除了增添的优化 Pass 外，另对框架做出如下修改：
 
 - 对框架接口做出修改，以支持直接反向支配结点的获取
@@ -52,7 +48,7 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
 - 修复框架中所有 int 和 unsigned 比较引起的 warning
 - 修复了 IR 头文件循环引用的问题
 
-此外，使用了自己的 IRBuilder 替换了框架的：
+此外，使用了自己的 IRBuilder 替换了框架提供的：
 
 - 减少全局变量使用
 - 代码从 900+ 行减少到 700+ 行
@@ -65,8 +61,8 @@ SysYF 语言是在 2020、2021 年全国大学生计算机系统能力大赛编�
 ### 构建编译器
 
 ```shell
-# 安装 clang, cmake, python3
-sudo apt install build-essential clang cmake python3
+# 安装 cmake
+sudo apt install build-essential cmake
 # 进入工作目录
 cd SysYF_Pass_Student
 # 编译该 cmake 项目
