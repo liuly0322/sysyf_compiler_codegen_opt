@@ -5,58 +5,70 @@
 </div>
 
 <p align="center">
-
-  <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml">
-    <img src="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml/badge.svg">
-  </a>
-
+<a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml">
+  <img src="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml/badge.svg">
+</a>
 </p>
 
-## 简介
+<p align="center">
+<a href="https://liuly.moe/sysyf_compiler_codegen_opt/">demo 网页</a> | <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/blob/main/SysYF%E8%AF%AD%E8%A8%80%E5%AE%9A%E4%B9%89.pdf">SysYF 语言定义</a> | <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/blob/main/doc.md">实验文档</a>
+</p>
 
-SysYF 语言是 C 语言的一个精简子集（[SysYF 语言定义](SysYF语言定义.pdf)）。没有指针，没有 for 语句。本仓库的实现仅支持一维数组。
-
-作为 2022 年中国科学技术大学编译原理 H 课程的实验项目（原先的实验文档见 [实验文档](./doc.md)），在提供的框架代码（已提供词法分析，语法分析，语义分析）基础上，主要完成了对中间代码（IR）的平台无关优化如下：
+本项目来源于 2022 年 USTC 编译原理 H 的课程实验。将 SysYF 语言代码编译到 LLVM IR，并对 IR 进行平台无关优化如下：
 
 - 稀疏条件常量传播
 - 公共子表达式消除
 - 死代码消除
 
-使用 WASM [构建](#构建-WASM) 了一个 [效果展示网页](https://liuly.moe/sysyf_compiler_codegen_opt/)。配合 _GitHub Actions_ 实现项目的持续集成（自动测试及网页更新）。
+SysYF 语言是 C 语言的一个精简子集，没有指针，没有 for 语句。本仓库的实现仅支持一维数组。
 
-具体实现上：
+## 实现
 
-- 区分纯函数，并保存纯函数具体改变的全局变量
-  - 公共子表达式消除和死代码消除可以进行更详细的讨论
-- 稀疏条件常量传播相比普通常量传播效果更好，考虑了不可达控制流
-- 公共子表达式消除
-  - 分类考虑了 load 指令
-    - 全局变量及局部数组可以由改变它的 call/store 指令注销
-    - 全局数组及数组参数可以由任意非纯函数调用指令或任意非局部数组的 store 指令注销（因为指针来源未知）
-  - 考虑了 store-load 转发，每条 store 指令首先生成一个配套的 load 指令（代表 store 定值已知），再进行公共子表达式消除
-- 死代码删除循环执行直到收敛
-  - 支持控制流简化
-  - 支持不可达基本块删除
+实验框架提供了词法分析（flex），语法分析（bison）的完整代码。在此基础上：
 
-除了增添的优化 Pass 外，另对框架做出如下修改：
+- [中间代码生成](./SysYF_Pass_Student/src/SysYFIRBuilder/IRBuilder.cpp) 根据语法分析得到的语法树生成 LLVM IR
+- [优化 Pass](./SysYF_Pass_Student/src/Optimize/) 提高生成 IR 的性能
 
-- 对框架接口做出修改，以支持直接反向支配结点的获取
-- 修复 `remove_operands` 不更新 `use.arg_no_` 的 bug
-- 在维护基本块前驱后继时：
-  - 对于添加操作，会首先判断前驱或后继链表中是否已存在需要添加的基本块
-  - 对于删除前驱操作，会首先移除来自该前驱的 phi 指令信息
+对实验框架做出所有修改记录如下：
+
+- 增加优化 Pass
+- 替换 IRBuilder.cpp
+- 修改基本块接口，以支持直接反向支配结点的获取
+- 修复 User 类的 `remove_operands` 方法不更新 `use.arg_no_` 的 bug
+- 添加基本块前驱后继时去重
+- 删除基本块前驱时，维护当前基本块 phi 指令
 - 修复框架中所有 int 和 unsigned 比较引起的 warning
 - 修复了 IR 头文件循环引用的问题
+- 使用 `.clang-format` 统一代码风格
 
-此外，使用了自己的 IRBuilder 替换了框架提供的：
+### 代码优化
 
-- 减少全局变量使用
-- 代码从 900+ 行减少到 700+ 行
-- 所有测试样例编译（仅开启 Mem2Reg）出的 IR 总行数从 15274 行减少到 13922 行
-  - 原框架存在 if 和 while 条件语句类型转换时的冗余
-  - O2 优化后，中间代码总行数几乎一致，说明优化 Pass 运作良好
+#### 纯函数判别
 
-## 环境搭建
+记录每个函数是否是纯函数，如果非纯函数会对哪些全局变量 store。
+
+这是为了服务于其他优化 Pass。
+
+#### 稀疏条件常量传播
+
+相比普通常量传播效果更好，考虑了分支指令的条件是常量时的处理。
+
+#### 公共子表达式消除
+
+在该优化 Pass 前，首先会为每条 store 指令生成一条对应的 load 指令，插入在对应 store 指令之后。该 load 指令的值已知（即 store 指令写入的值），因此可以实现 store-load 的转发，删除更多的「公共子表达式」。只需要最后把这些「虚拟」load 指令替换为已知定值即可。
+
+对于工作在 SSA 上的公共子表达式删除而言，需要特殊讨论的只有 load 指令何时会被注销：
+
+- 对全局变量的 load 指令可以由对该全局变量的 store 指令，或会改变该全局变量的 call 指令注销。
+- 对全局数组的某个下标的 load 指令可以由对该全局数组任意下标的 store 指令，或对任意作为函数参数的数组的任意下标的 store 指令，或非纯函数调用指令注销。
+- 对作为函数参数的数组的某个下标的 load 指令可以由对任意全局数组任意下标的 store 指令或任意作为函数参数的数组的任意下标的 store 指令，或非纯函数调用指令注销。
+- 对局部数组的某个下标的 load 指令可以由对该局部数组任意下标的 store 指令，或以该局部数组为参数的非纯函数调用指令注销。
+
+#### 死代码删除
+
+首先用 Mark-Sweep 算法删除无用指令，然后再尝试简化控制流并删除不可达基本块。循环执行以上步骤，直到收敛。
+
+## 构建
 
 ### 构建编译器
 
@@ -95,7 +107,7 @@ docker run \
 
 将 compiler.js 和 compiler.wasm 放置在项目目录下的 static 文件夹内即可。
 
-## 运行说明
+## 运行
 
 可以通过如下方式运行编译器:
 
