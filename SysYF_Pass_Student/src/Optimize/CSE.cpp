@@ -95,6 +95,8 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
         return target_load == findOrigin(inst2->get_operand(1));
     if (inst2->is_call()) {
         auto *callee = static_cast<Function *>(inst2->get_operand(0));
+        if (is_pure[callee])
+            return false;
         if (global_var_store_effects[callee].count(lval_load) != 0)
             return true;
         for (auto *opr : inst2->get_operands())
