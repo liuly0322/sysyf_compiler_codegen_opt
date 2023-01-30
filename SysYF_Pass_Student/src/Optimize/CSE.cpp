@@ -61,9 +61,39 @@ Value *CSE::findOrigin(Value *val) {
     return lval_runner;
 }
 
+/**
+ * @brief 用于辅助判断 store 是否会注销 load
+ * 如果 load 指令和 store 指令的下标都是常数，且不相同，返回 true
+ *
+ * @param inst1 load 指令
+ * @param inst2 store 指令
+ * @return true 下标可以确定不同
+ * @return false 下标不确定是否可能相同
+ */
+bool cmpStoreIndex(Instruction *inst1, Instruction *inst2) {
+    if (!inst2->is_store())
+        return false;
+    auto *lval1 = static_cast<LoadInst *>(inst1)->get_lval();
+    auto *lval2 = static_cast<StoreInst *>(inst2)->get_lval();
+    auto *gep1 = dynamic_cast<GetElementPtrInst *>(lval1);
+    auto *gep2 = dynamic_cast<GetElementPtrInst *>(lval2);
+    if (gep1 == nullptr || gep2 == nullptr)
+        return false;
+    auto *index1 = gep1->get_operands().back();
+    auto *index2 = gep2->get_operands().back();
+    auto *const_index1 = dynamic_cast<ConstantInt *>(index1);
+    auto *const_index2 = dynamic_cast<ConstantInt *>(index2);
+    if (const_index1 == nullptr || const_index2 == nullptr)
+        return false;
+    return const_index1->get_value() != const_index2->get_value();
+}
+
 bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
     // assert inst1 is load
     if (!inst1->is_load())
+        return false;
+    // if store and not same index, return false
+    if (cmpStoreIndex(inst1, inst2))
         return false;
     auto *lval_load = inst1->get_operand(0);
     auto *target_load = findOrigin(lval_load);
