@@ -76,12 +76,12 @@ Constant *SCCP::constFold(Instruction *inst, Constant *v) {
 }
 
 Constant *SCCP::constFold(Instruction *inst) {
-    if (binary_ops.count(inst->get_instr_op_name()) != 0) {
+    if (inst->is_binary()) {
         auto *const_v1 = getMapped(inst->get_operand(0)).value;
         auto *const_v2 = getMapped(inst->get_operand(1)).value;
         if (const_v1 != nullptr && const_v2 != nullptr)
             return constFold(inst, const_v1, const_v2);
-    } else if (unary_ops.count(inst->get_instr_op_name()) != 0) {
+    } else if (inst->is_unary()) {
         auto *const_v = getMapped(inst->get_operand(0)).value;
         if (const_v != nullptr)
             return constFold(inst, const_v);
@@ -138,8 +138,7 @@ void SCCP::visitInst(Instruction *inst) {
                 cfg_worklist.emplace_back(bb, false_bb);
             }
         }
-    } else if (binary_ops.count(inst->get_instr_op_name()) != 0 ||
-               unary_ops.count(inst->get_instr_op_name()) != 0) {
+    } else if (inst->is_binary() || inst->is_unary()) {
         auto *folded = constFold(inst);
         if (folded != nullptr) {
             cur_status = {ValueStatus::CONST, folded};

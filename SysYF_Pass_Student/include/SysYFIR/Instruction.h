@@ -43,7 +43,9 @@ class Instruction : public User {
     // ty here is result type
     Instruction(Type *ty, OpID id, unsigned num_ops, BasicBlock *parent);
     Instruction(Type *ty, OpID id, unsigned num_ops);
-    inline const BasicBlock *get_parent() const { return parent_; }
+    [[nodiscard]] inline const BasicBlock *get_parent() const {
+        return parent_;
+    }
     inline BasicBlock *get_parent() { return parent_; }
     void set_parent(BasicBlock *parent) { this->parent_ = parent; }
     // Return the function this instruction belongs to.
@@ -55,74 +57,51 @@ class Instruction : public User {
         switch (op_id_) {
         case ret:
             return "ret";
-            break;
         case br:
             return "br";
-            break;
         case add:
             return "add";
-            break;
         case sub:
             return "sub";
-            break;
         case mul:
             return "mul";
-            break;
         case sdiv:
             return "sdiv";
-            break;
         case srem:
             return "srem";
-            break;
         case fadd:
             return "fadd";
-            break;
         case fsub:
             return "fsub";
-            break;
         case fmul:
             return "fmul";
-            break;
         case fdiv:
             return "fdiv";
-            break;
         case alloca:
             return "alloca";
-            break;
         case load:
             return "load";
-            break;
         case store:
             return "store";
-            break;
         case cmp:
             return "cmp";
-            break;
         case fcmp:
             return "fcmp";
-            break;
         case phi:
             return "phi";
-            break;
         case call:
             return "call";
-            break;
         case getelementptr:
             return "getelementptr";
-            break;
         case zext:
             return "zext";
-            break;
         case fptosi:
             return "fptosi";
-            break;
         case sitofp:
             return "sitofp";
-            break;
 
         default:
             return "";
-            break;
         }
     }
 
@@ -158,6 +137,11 @@ class Instruction : public User {
     bool is_fptosi() { return op_id_ == fptosi; }
     bool is_sitofp() { return op_id_ == sitofp; }
 
+    bool is_unary() {
+        return (is_fptosi() || is_sitofp() || is_zext()) &&
+               (get_num_operand() == 1);
+    }
+
     bool is_int_binary() {
         return (is_add() || is_sub() || is_mul() || is_div() || is_rem()) &&
                (get_num_operand() == 2);
@@ -168,12 +152,18 @@ class Instruction : public User {
                (get_num_operand() == 2);
     }
 
-    bool is_binary() { return is_int_binary() || is_float_binary(); }
+    bool is_cmp_binary() {
+        return (is_cmp() || is_fcmp()) && (get_num_operand() == 2);
+    }
+
+    bool is_binary() {
+        return is_int_binary() || is_float_binary() || is_cmp_binary();
+    }
 
     bool isTerminator() { return is_br() || is_ret(); }
 
     void set_id(int id) { id_ = id; }
-    int get_id() const { return id_; }
+    [[nodiscard]] int get_id() const { return id_; }
 
   private:
     BasicBlock *parent_;
@@ -205,7 +195,7 @@ class BinaryInst : public Instruction {
     static BinaryInst *create_fdiv(Value *v1, Value *v2, BasicBlock *bb,
                                    Module *m);
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     void assertValid();
@@ -232,7 +222,7 @@ class CmpInst : public Instruction {
     CmpOp get_cmp_op() { return cmp_op_; }
     void set_cmp_op(CmpOp op) { cmp_op_ = op; }
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     CmpOp cmp_op_;
@@ -261,7 +251,7 @@ class FCmpInst : public Instruction {
     CmpOp get_cmp_op() { return cmp_op_; }
     void set_cmp_op(CmpOp op) { cmp_op_ = op; }
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     CmpOp cmp_op_;
@@ -277,9 +267,9 @@ class CallInst : public Instruction {
   public:
     static CallInst *create(Function *func, std::vector<Value *> args,
                             BasicBlock *bb);
-    FunctionType *get_function_type() const;
+    [[nodiscard]] FunctionType *get_function_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class BranchInst : public Instruction {
@@ -288,29 +278,29 @@ class BranchInst : public Instruction {
                BasicBlock *bb);
     BranchInst(Value *cond, BasicBlock *bb);
     BranchInst(BasicBlock *if_true, BasicBlock *bb);
-    BranchInst(BasicBlock *bb);
+    explicit BranchInst(BasicBlock *bb);
 
   public:
     static BranchInst *create_cond_br(Value *cond, BasicBlock *if_true,
                                       BasicBlock *if_false, BasicBlock *bb);
     static BranchInst *create_br(BasicBlock *if_true, BasicBlock *bb);
 
-    bool is_cond_br() const;
+    [[nodiscard]] bool is_cond_br() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class ReturnInst : public Instruction {
   private:
     ReturnInst(Value *val, BasicBlock *bb);
-    ReturnInst(BasicBlock *bb);
+    explicit ReturnInst(BasicBlock *bb);
 
   public:
     static ReturnInst *create_ret(Value *val, BasicBlock *bb);
     static ReturnInst *create_void_ret(BasicBlock *bb);
-    bool is_void_ret() const;
+    [[nodiscard]] bool is_void_ret() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class GetElementPtrInst : public Instruction {
@@ -321,9 +311,9 @@ class GetElementPtrInst : public Instruction {
     static Type *get_element_type(Value *ptr, std::vector<Value *> idxs);
     static GetElementPtrInst *create_gep(Value *ptr, std::vector<Value *> idxs,
                                          BasicBlock *bb);
-    Type *get_element_type() const;
+    [[nodiscard]] Type *get_element_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Type *element_ty_;
@@ -339,7 +329,7 @@ class StoreInst : public Instruction {
     Value *get_rval() { return this->get_operand(0); }
     Value *get_lval() { return this->get_operand(1); }
 
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class LoadInst : public Instruction {
@@ -350,9 +340,9 @@ class LoadInst : public Instruction {
     static LoadInst *create_load(Type *ty, Value *ptr, BasicBlock *bb);
     Value *get_lval() { return this->get_operand(0); }
 
-    Type *get_load_type() const;
+    [[nodiscard]] Type *get_load_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class AllocaInst : public Instruction {
@@ -362,9 +352,9 @@ class AllocaInst : public Instruction {
   public:
     static AllocaInst *create_alloca(Type *ty, BasicBlock *bb);
 
-    Type *get_alloca_type() const;
+    [[nodiscard]] Type *get_alloca_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Type *alloca_ty_;
@@ -377,9 +367,9 @@ class ZextInst : public Instruction {
   public:
     static ZextInst *create_zext(Value *val, Type *ty, BasicBlock *bb);
 
-    Type *get_dest_type() const;
+    [[nodiscard]] Type *get_dest_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Type *dest_ty_;
@@ -392,9 +382,9 @@ class FpToSiInst : public Instruction {
   public:
     static FpToSiInst *create_fptosi(Value *val, Type *ty, BasicBlock *bb);
 
-    Type *get_dest_type() const;
+    [[nodiscard]] Type *get_dest_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Type *dest_ty_;
@@ -407,9 +397,9 @@ class SiToFpInst : public Instruction {
   public:
     static SiToFpInst *create_sitofp(Value *val, Type *ty, BasicBlock *bb);
 
-    Type *get_dest_type() const;
+    [[nodiscard]] Type *get_dest_type() const;
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Type *dest_ty_;
@@ -428,7 +418,7 @@ class PhiInst : public Instruction {
         this->add_operand(val);
         this->add_operand(pre_bb);
     }
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Value *l_val_;

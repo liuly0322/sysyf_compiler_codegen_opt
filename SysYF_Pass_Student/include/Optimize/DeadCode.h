@@ -3,8 +3,7 @@
 
 #include "Pass.h"
 #include "PureFunction.h"
-#include <unordered_map>
-#include <unordered_set>
+#include <set>
 
 class DeadCode : public Pass {
   public:
@@ -18,7 +17,7 @@ class DeadCode : public Pass {
 
   private:
     const std::string name = "DeadCode";
-    std::unordered_set<Instruction *> marked;
+    std::set<Instruction *> marked;
 };
 
 #endif // SYSYF_DEADCODE_H

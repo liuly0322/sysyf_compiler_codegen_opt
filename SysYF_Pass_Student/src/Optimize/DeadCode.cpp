@@ -1,7 +1,5 @@
 #include "DeadCode.h"
 #include <functional>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 using PureFunction::is_pure;
@@ -62,17 +60,16 @@ void DeadCode::execute() {
 }
 
 void DeadCode::mark(Function *f) {
-    std::unordered_set<Instruction *> marked{};
-    std::vector<Instruction *> work_list{};
+    marked.clear();
+    std::vector<Instruction *> worklist{};
 
     // 初始标记 critical 变量
-    std::unordered_map<AllocaInst *, std::unordered_set<StoreInst *>>
-        lval_store{};
+    std::map<AllocaInst *, std::set<StoreInst *>> lval_store{};
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
             if (is_critical_inst(inst)) {
                 marked.insert(inst);
-                work_list.push_back(inst);
+                worklist.push_back(inst);
             } else if (inst->is_store()) {
                 auto *lval = PureFunction::store_to_alloca(inst);
                 if (lval_store.count(lval) != 0) {
@@ -85,14 +82,14 @@ void DeadCode::mark(Function *f) {
     }
 
     // 遍历 worklist
-    for (auto i = 0U; i < work_list.size(); i++) {
-        auto *inst = work_list[i];
+    for (auto i = 0U; i < worklist.size(); i++) {
+        auto *inst = worklist[i];
         // 如果数组左值 critical，则标记所有对数组的 store 也为 critical
         if (inst->is_alloca()) {
             auto *lval = static_cast<AllocaInst *>(inst);
             for (auto *store_inst : lval_store[lval]) {
                 marked.insert(store_inst);
-                work_list.push_back(store_inst);
+                worklist.push_back(store_inst);
             }
             lval_store.erase(lval);
         }
@@ -102,13 +99,13 @@ void DeadCode::mark(Function *f) {
             auto *bb = dynamic_cast<BasicBlock *>(op);
             if (def != nullptr && marked.count(def) == 0) {
                 marked.insert(def);
-                work_list.push_back(def);
+                worklist.push_back(def);
             }
             if (bb != nullptr) {
                 auto *terminator = bb->get_terminator();
                 if (marked.count(terminator) == 0) {
                     marked.insert(terminator);
-                    work_list.push_back(terminator);
+                    worklist.push_back(terminator);
                 }
             }
         }
@@ -119,11 +116,9 @@ void DeadCode::mark(Function *f) {
             if (marked.count(terminator) != 0)
                 continue;
             marked.insert(terminator);
-            work_list.push_back(terminator);
+            worklist.push_back(terminator);
         }
     }
-
-    this->marked = std::move(marked);
 }
 
 void DeadCode::sweep(Function *f) {
@@ -212,9 +207,8 @@ bool DeadCode::clean(Function *f) {
                 return;
 
             // 这里要求 j 不能有同时含有 i 和 i 前驱作为操作数的 phi 指令
-            const std::unordered_set<Value *> pres{
-                i->get_pre_basic_blocks().begin(),
-                i->get_pre_basic_blocks().end()};
+            const std::set<Value *> pres{i->get_pre_basic_blocks().begin(),
+                                         i->get_pre_basic_blocks().end()};
             bool has_both_pre_and_i = false;
 
             for (auto *j_inst : j->get_instructions()) {
@@ -306,9 +300,9 @@ bool DeadCode::clean(Function *f) {
         }
     };
 
-    auto visited = std::unordered_set<BasicBlock *>{};
+    auto visited = std::set<BasicBlock *>{};
     auto post_traverse = [&]() {
-        auto work_list = std::vector<BasicBlock *>{};
+        auto worklist = std::vector<BasicBlock *>{};
         std::function<void(BasicBlock *)> post_traverse_recur;
         post_traverse_recur = [&](BasicBlock *i) {
             if (visited.count(i) != 0)
@@ -317,10 +311,10 @@ bool DeadCode::clean(Function *f) {
             for (auto *bb : i->get_succ_basic_blocks()) {
                 post_traverse_recur(bb);
             }
-            work_list.push_back(i);
+            worklist.push_back(i);
         };
         post_traverse_recur(f->get_entry_block());
-        for (auto *bb : work_list) {
+        for (auto *bb : worklist) {
             visit(bb);
         }
     };

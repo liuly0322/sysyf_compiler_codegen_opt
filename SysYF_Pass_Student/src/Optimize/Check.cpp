@@ -1,8 +1,7 @@
 #include "Check.h"
 #include <algorithm>
-#include <unordered_set>
 
-void writeInfo(std::string message) {
+void writeInfo(const std::string &message) {
     std::cout << "\033[36;1m" << message << "\033[0m ";
 }
 
@@ -51,7 +50,6 @@ void Check::checkFailed(const std::string &message, T1 V1, Ts... Vs) {
     } while (false)
 
 void Check::execute() {
-    // TODO write your IR Module checker here.
     // Collect functions
     // std::cout << "/*************Check************/" << std::endl;
     functions.clear();
@@ -158,8 +156,8 @@ void Check::checkPhiInstruction(Instruction *inst) {
     BasicBlock *bb = inst->get_parent();
     Function *fun = inst->get_function();
 
-    auto preds = std::unordered_set<BasicBlock *>{
-        bb->get_pre_basic_blocks().begin(), bb->get_pre_basic_blocks().end()};
+    auto preds = std::set<BasicBlock *>{bb->get_pre_basic_blocks().begin(),
+                                        bb->get_pre_basic_blocks().end()};
 
     // Check nums of entry.
     // Verify(inst->get_operands().size() == preds.size() * 2,
@@ -218,12 +216,12 @@ void Check::checkInstruction(Instruction *inst) {
                    inst, bb, fun, "function", func->get_name(), "not defined!");
             checkCallInstruction(inst);
         }
-        BasicBlock *block = dynamic_cast<BasicBlock *>(opr);
+        auto *block = dynamic_cast<BasicBlock *>(opr);
         if (block != nullptr) {
             Verify(blocks.count(block), "Operand(BasicBlock) is not defined!",
                    inst, bb, fun, "block", block->get_name(), "not defined!");
         }
-        Instruction *instr = dynamic_cast<Instruction *>(opr);
+        auto *instr = dynamic_cast<Instruction *>(opr);
         if (instr != nullptr) {
             Verify(define_inst.count(instr), "Operand(Value) is not defined!",
                    inst, bb, fun, "operand", instr->get_name(), "not defined!");
@@ -234,7 +232,7 @@ void Check::checkInstruction(Instruction *inst) {
     if (inst->is_br()) {
         auto &succ_blocks = bb->get_succ_basic_blocks();
         for (auto *opr : inst->get_operands()) {
-            BasicBlock *block = dynamic_cast<BasicBlock *>(opr);
+            auto *block = dynamic_cast<BasicBlock *>(opr);
             if (block != nullptr) {
                 auto it =
                     std::find(succ_blocks.begin(), succ_blocks.end(), block);
@@ -287,7 +285,7 @@ void Check::checkUse(User *user) {
     // instructions themselves, actually have parent basic blocks.  If the use
     // is not an instruction, it is an error!
     for (auto &use : user->get_use_list()) {
-        Instruction *use_inst = dynamic_cast<Instruction *>(use.val_);
+        auto *use_inst = dynamic_cast<Instruction *>(use.val_);
         if (use_inst != nullptr) {
             Verify(use_inst->get_parent() != nullptr,
                    "Instruction referencing instruction/global value not "

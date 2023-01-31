@@ -2,8 +2,6 @@
 #define SYSYF_SCCP_H
 
 #include "Pass.h"
-#include <unordered_map>
-#include <unordered_set>
 
 static inline int get_const_int(Value *constant) {
     return static_cast<ConstantInt *>(constant)->get_value();
@@ -70,16 +68,11 @@ class SCCP : public Pass {
     void visitInst(Instruction *inst);
     void replaceConstant(Function *f);
 
-    const std::unordered_set<std::string> binary_ops{
-        "add",  "sub",  "mul",  "sdiv", "srem", "fadd",
-        "fsub", "fmul", "fdiv", "cmp",  "fcmp"};
-    const std::unordered_set<std::string> unary_ops{"fptosi", "sitofp", "zext"};
-
     Constant *constFold(Instruction *inst, Constant *v1, Constant *v2);
     Constant *constFold(Instruction *inst, Constant *v);
     Constant *constFold(Instruction *inst);
 
-    std::unordered_map<Value *, ValueStatus> value_map;
+    std::map<Value *, ValueStatus> value_map;
 
     ValueStatus getMapped(Value *key) {
         if (auto *constant = dynamic_cast<Constant *>(key))

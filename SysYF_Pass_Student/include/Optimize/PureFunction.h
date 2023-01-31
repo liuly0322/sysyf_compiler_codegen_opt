@@ -2,13 +2,13 @@
 #define SYSYF_PUREFUNCTION_H
 
 #include "Module.h"
+#include <map>
 #include <set>
-#include <unordered_map>
 
 namespace PureFunction {
-extern std::unordered_map<Function *, bool> is_pure;
-extern std::unordered_map<Function *, std::set<Value *>>
-    global_var_store_effects;
+
+extern std::map<Function *, bool> is_pure;
+extern std::map<Function *, std::set<Value *>> global_var_store_effects;
 
 /**
  * @brief 试图还原 store 到 左值 (alloca 指令)

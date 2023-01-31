@@ -3,12 +3,12 @@
 
 #include "PureFunction.h"
 #include "Module.h"
-#include <unordered_map>
+#include <map>
 
 namespace PureFunction {
 
-std::unordered_map<Function *, bool> is_pure;
-std::unordered_map<Function *, std::set<Value *>> global_var_store_effects;
+std::map<Function *, bool> is_pure;
+std::map<Function *, std::set<Value *>> global_var_store_effects;
 
 AllocaInst *store_to_alloca(Instruction *inst) {
     // lval 无法转换为 alloca 指令说明是非局部的，有副作用
@@ -43,17 +43,17 @@ void markPure(Module *module) {
     is_pure.clear();
     global_var_store_effects.clear();
     auto functions = module->get_functions();
-    std::vector<Function *> work_list;
+    std::vector<Function *> worklist;
 
     for (auto *f : functions) {
         is_pure[f] = markPureInside(f);
         if (!is_pure[f] || !global_var_store_effects[f].empty()) {
-            work_list.push_back(f);
+            worklist.push_back(f);
         }
     }
 
-    for (auto i = 0U; i < work_list.size(); i++) {
-        auto *callee_function = work_list[i];
+    for (auto i = 0U; i < worklist.size(); i++) {
+        auto *callee_function = worklist[i];
         for (auto &use : callee_function->get_use_list()) {
             auto *call_inst = dynamic_cast<CallInst *>(use.val_);
             auto *caller_function = call_inst->get_function();
@@ -69,7 +69,7 @@ void markPure(Module *module) {
                 influenced = true;
             }
             if (influenced)
-                work_list.push_back(caller_function);
+                worklist.push_back(caller_function);
         }
     }
 }
