@@ -8,7 +8,7 @@ using PureFunction::global_var_store_effects;
 using PureFunction::is_pure;
 using PureFunction::markPure;
 
-void CSE::forward_store() {
+void CSE::forwardStore() {
     auto store_insts = std::vector<std::list<Instruction *>::iterator>{};
     for (auto *fun : module->get_functions()) {
         for (auto *bb : fun->get_basic_blocks()) {
@@ -32,7 +32,7 @@ void CSE::forward_store() {
     }
 }
 
-void CSE::delete_forward() {
+void CSE::deleteForward() {
     for (auto &[load_inst, value] : forwarded_load) {
         load_inst->replace_all_use_with(value);
         load_inst->get_parent()->delete_instr(load_inst);
@@ -41,7 +41,7 @@ void CSE::delete_forward() {
 
 void CSE::execute() {
     markPure(module);
-    forward_store();
+    forwardStore();
     for (auto *fun : module->get_functions()) {
         if (fun->is_declaration())
             continue;
@@ -50,7 +50,7 @@ void CSE::execute() {
             globalCSE(fun);
         } while (!delete_list.empty());
     }
-    delete_forward();
+    deleteForward();
 }
 
 Value *CSE::findOrigin(Value *val) {
@@ -62,15 +62,14 @@ Value *CSE::findOrigin(Value *val) {
 }
 
 /**
- * @brief 用于辅助判断 store 是否会注销 load
- * 如果 load 指令和 store 指令的下标都是常数，且不相同，返回 true
+ * @brief 如果 load 和 store 指令的下标是不相同的常数，返回 true
  *
  * @param inst1 load 指令
  * @param inst2 store 指令
  * @return true 下标可以确定不同
  * @return false 下标不确定是否可能相同
  */
-bool cmpStoreIndex(Instruction *inst1, Instruction *inst2) {
+bool isStoreWithDifferentIndex(Instruction *inst1, Instruction *inst2) {
     if (!inst2->is_store())
         return false;
     auto *lval1 = static_cast<LoadInst *>(inst1)->get_lval();
@@ -88,12 +87,12 @@ bool cmpStoreIndex(Instruction *inst1, Instruction *inst2) {
     return const_index1->get_value() != const_index2->get_value();
 }
 
-bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
-    // assert inst1 is load
+bool CSE::isKill(Instruction *inst1, Instruction *inst2) {
+    // inst1 must be load inst to be killed
     if (!inst1->is_load())
         return false;
     // if store and not same index, return false
-    if (cmpStoreIndex(inst1, inst2))
+    if (isStoreWithDifferentIndex(inst1, inst2))
         return false;
     auto *lval_load = inst1->get_operand(0);
     auto *target_load = findOrigin(lval_load);
@@ -102,7 +101,6 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
                (dynamic_cast<GlobalVariable *>(target) != nullptr &&
                 dynamic_cast<GlobalVariable *>(lval) == nullptr);
     };
-    // 1. argument or global array
     if (isArgOrGlobalArrayOp(lval_load, target_load)) {
         if (inst2->is_store()) {
             auto *lval_store = inst2->get_operand(1);
@@ -120,7 +118,7 @@ bool CSE::cmp(Instruction *inst1, Instruction *inst2) {
         }
         return false;
     }
-    // 2. local array or global variable
+    // local array or global variable
     if (inst2->is_store())
         return target_load == findOrigin(inst2->get_operand(1));
     if (inst2->is_call()) {
@@ -140,7 +138,7 @@ Instruction *CSE::isAppear(Instruction *inst, std::vector<Instruction *> &insts,
                            int index) {
     for (auto i = index - 1; i >= 0; --i) {
         auto *instr = insts[i];
-        if (cmp(inst, instr))
+        if (isKill(inst, instr))
             return nullptr;
         if (Expression(inst) == Expression(instr))
             return instr;
@@ -157,7 +155,7 @@ void CSE::localCSE(Function *fun) {
                 insts.push_back(inst);
             for (auto i = 0U; i < insts.size(); ++i) {
                 auto *inst = insts[i];
-                if (!isOptmized(inst))
+                if (!isOptimizable(inst))
                     continue;
                 auto *preInst = isAppear(inst, insts, i);
                 if (preInst != nullptr) {
@@ -166,7 +164,7 @@ void CSE::localCSE(Function *fun) {
                     break;
                 }
             }
-            delete_instr();
+            deleteInstr();
         } while (!delete_list.empty());
     }
 }
@@ -183,7 +181,7 @@ bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts,
                  unsigned index) {
     for (auto i = index + 1; i < insts.size(); ++i) {
         auto *instr = insts[i];
-        if (cmp(inst, instr))
+        if (isKill(inst, instr))
             return true;
     }
     return false;
@@ -194,7 +192,7 @@ void CSE::calcGenKill(Function *fun) {
     available.clear();
     for (auto *bb : fun->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
-            if (!isOptmized(inst))
+            if (!isOptimizable(inst))
                 continue;
             const Expression expr{inst};
             if (std::find(available.begin(), available.end(), expr) !=
@@ -214,7 +212,7 @@ void CSE::calcGenKill(Function *fun) {
             insts.push_back(inst);
         for (auto i = 0U; i < insts.size(); ++i) {
             auto *inst = insts[i];
-            if (!isOptmized(inst) ||
+            if (!isOptimizable(inst) ||
                 (inst->is_load() && isKill(inst, insts, i)))
                 continue;
             auto index = std::find(available.begin(), available.end(),
@@ -235,7 +233,7 @@ void CSE::calcGenKill(Function *fun) {
             Value *target = inst;
             for (auto i = 0U; i < available.size(); ++i) {
                 if (available[i].inst->is_load() &&
-                    cmp(available[i].inst, inst))
+                    isKill(available[i].inst, inst))
                     kill[i] = true;
                 auto &operands = available[i].operands;
                 if (std::find(operands.begin(), operands.end(), target) !=
@@ -287,7 +285,7 @@ void CSE::findSource(Function *fun) {
             insts.push_back(inst);
         for (auto i = 0U; i < insts.size(); ++i) {
             auto *inst = insts[i];
-            if (!isOptmized(inst))
+            if (!isOptimizable(inst))
                 continue;
             auto it =
                 std::find(available.begin(), available.end(), Expression(inst));
@@ -341,7 +339,7 @@ Instruction *findReplacement(BasicBlock *bb, std::set<Instruction *> &source) {
 void CSE::replaceSubExpr(Function *fun) {
     for (auto *bb : fun->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
-            if (!isOptmized(inst))
+            if (!isOptimizable(inst))
                 continue;
             auto it =
                 std::find(available.begin(), available.end(), Expression(inst));
@@ -355,10 +353,10 @@ void CSE::replaceSubExpr(Function *fun) {
             }
         }
     }
-    delete_instr();
+    deleteInstr();
 }
 
-void CSE::delete_instr() {
+void CSE::deleteInstr() {
     for (auto *inst : delete_list)
         inst->get_parent()->delete_instr(inst);
 }

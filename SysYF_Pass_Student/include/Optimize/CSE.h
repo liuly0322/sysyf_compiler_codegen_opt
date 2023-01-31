@@ -86,30 +86,29 @@ class CSE : public Pass {
   public:
     explicit CSE(Module *m) : Pass(m){};
     void execute() final;
-    static bool cmp(Instruction *inst1, Instruction *inst2);
     static Value *findOrigin(Value *val);
     static Instruction *isAppear(Instruction *inst,
                                  std::vector<Instruction *> &insts, int index);
+    static bool isKill(Instruction *inst1, Instruction *inst2);
     static bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
                        unsigned index);
-    void forward_store();
-    void delete_forward();
+    void forwardStore();
+    void deleteForward();
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
     void calcGenKill(Function *fun);
     void calcInOut(Function *fun);
     void findSource(Function *fun);
     void replaceSubExpr(Function *fun);
-    void delete_instr();
+    void deleteInstr();
 
     [[nodiscard]] std::string get_name() const override { return name; }
-    static bool isOptmized(Instruction *inst) {
-        if (inst->is_void() || inst->is_alloca()) {
+    static bool isOptimizable(Instruction *inst) {
+        if (inst->is_void() || inst->is_alloca())
             return false;
-        }
-        if (inst->is_call() && !PureFunction::is_pure[dynamic_cast<Function *>(
-                                   inst->get_operand(0))]) {
-            return false;
+        if (inst->is_call()) {
+            auto *callee = dynamic_cast<Function *>(inst->get_operand(0));
+            return PureFunction::is_pure[callee];
         }
         return true;
     }
