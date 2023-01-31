@@ -187,8 +187,7 @@ bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts,
     return false;
 }
 
-void CSE::calcGenKill(Function *fun) {
-    // Get available expressions
+void CSE::calcAvailable(Function *fun) {
     available.clear();
     for (auto *bb : fun->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
@@ -202,8 +201,9 @@ void CSE::calcGenKill(Function *fun) {
             available.push_back(expr);
         }
     }
+}
 
-    // Get Gen
+void CSE::calcGen(Function *fun) {
     GEN.clear();
     for (auto *bb : fun->get_basic_blocks()) {
         std::vector<bool> gen(available.size(), false);
@@ -222,8 +222,9 @@ void CSE::calcGenKill(Function *fun) {
         }
         GEN.insert({bb, gen});
     }
+}
 
-    // Get Kill
+void CSE::calcKill(Function *fun) {
     KILL.clear();
     for (auto *bb : fun->get_basic_blocks()) {
         std::vector<bool> kill(available.size(), false);
@@ -244,6 +245,12 @@ void CSE::calcGenKill(Function *fun) {
         }
         KILL.insert({bb, kill});
     }
+}
+
+void CSE::calcGenKill(Function *fun) {
+    calcAvailable(fun);
+    calcGen(fun);
+    calcKill(fun);
 }
 
 void CSE::calcInOut(Function *fun) {

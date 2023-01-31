@@ -53,57 +53,6 @@ class Instruction : public User {
     Module *get_module();
 
     OpID get_instr_type() { return op_id_; }
-    std::string get_instr_op_name() {
-        switch (op_id_) {
-        case ret:
-            return "ret";
-        case br:
-            return "br";
-        case add:
-            return "add";
-        case sub:
-            return "sub";
-        case mul:
-            return "mul";
-        case sdiv:
-            return "sdiv";
-        case srem:
-            return "srem";
-        case fadd:
-            return "fadd";
-        case fsub:
-            return "fsub";
-        case fmul:
-            return "fmul";
-        case fdiv:
-            return "fdiv";
-        case alloca:
-            return "alloca";
-        case load:
-            return "load";
-        case store:
-            return "store";
-        case cmp:
-            return "cmp";
-        case fcmp:
-            return "fcmp";
-        case phi:
-            return "phi";
-        case call:
-            return "call";
-        case getelementptr:
-            return "getelementptr";
-        case zext:
-            return "zext";
-        case fptosi:
-            return "fptosi";
-        case sitofp:
-            return "sitofp";
-
-        default:
-            return "";
-        }
-    }
 
     bool is_void() {
         return ((op_id_ == ret) || (op_id_ == br) || (op_id_ == store) ||

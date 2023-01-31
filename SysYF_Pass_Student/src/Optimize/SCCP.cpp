@@ -3,6 +3,44 @@
 #define CONST_INT(num) ConstantInt::get(num, module)
 #define CONST_FLOAT(num) ConstantFloat::get(num, module)
 
+Constant *SCCP::constFold(CmpInst *inst, Constant *v1, Constant *v2) {
+    switch (inst->get_cmp_op()) {
+    case CmpInst::EQ:
+        return CONST_INT(get_const_int(v1) == get_const_int(v2));
+    case CmpInst::NE:
+        return CONST_INT(get_const_int(v1) != get_const_int(v2));
+    case CmpInst::GT:
+        return CONST_INT(get_const_int(v1) > get_const_int(v2));
+    case CmpInst::GE:
+        return CONST_INT(get_const_int(v1) >= get_const_int(v2));
+    case CmpInst::LT:
+        return CONST_INT(get_const_int(v1) < get_const_int(v2));
+    case CmpInst::LE:
+        return CONST_INT(get_const_int(v1) <= get_const_int(v2));
+    default:
+        return nullptr;
+    }
+}
+
+Constant *SCCP::constFold(FCmpInst *inst, Constant *v1, Constant *v2) {
+    switch (inst->get_cmp_op()) {
+    case FCmpInst::EQ:
+        return CONST_INT(get_const_float(v1) == get_const_float(v2));
+    case FCmpInst::NE:
+        return CONST_INT(get_const_float(v1) != get_const_float(v2));
+    case FCmpInst::GT:
+        return CONST_INT(get_const_float(v1) > get_const_float(v2));
+    case FCmpInst::GE:
+        return CONST_INT(get_const_float(v1) >= get_const_float(v2));
+    case FCmpInst::LT:
+        return CONST_INT(get_const_float(v1) < get_const_float(v2));
+    case FCmpInst::LE:
+        return CONST_INT(get_const_float(v1) <= get_const_float(v2));
+    default:
+        return nullptr;
+    }
+}
+
 Constant *SCCP::constFold(Instruction *inst, Constant *v1, Constant *v2) {
     auto op = inst->get_instr_type();
     switch (op) {
@@ -24,38 +62,10 @@ Constant *SCCP::constFold(Instruction *inst, Constant *v1, Constant *v2) {
         return CONST_FLOAT(get_const_float(v1) * get_const_float(v2));
     case Instruction::fdiv:
         return CONST_FLOAT(get_const_float(v1) / get_const_float(v2));
-
     case Instruction::cmp:
-        switch (dynamic_cast<CmpInst *>(inst)->get_cmp_op()) {
-        case CmpInst::EQ:
-            return CONST_INT(get_const_int(v1) == get_const_int(v2));
-        case CmpInst::NE:
-            return CONST_INT(get_const_int(v1) != get_const_int(v2));
-        case CmpInst::GT:
-            return CONST_INT(get_const_int(v1) > get_const_int(v2));
-        case CmpInst::GE:
-            return CONST_INT(get_const_int(v1) >= get_const_int(v2));
-        case CmpInst::LT:
-            return CONST_INT(get_const_int(v1) < get_const_int(v2));
-        case CmpInst::LE:
-            return CONST_INT(get_const_int(v1) <= get_const_int(v2));
-        }
-
+        return constFold(static_cast<CmpInst *>(inst), v1, v2);
     case Instruction::fcmp:
-        switch (dynamic_cast<FCmpInst *>(inst)->get_cmp_op()) {
-        case FCmpInst::EQ:
-            return CONST_INT(get_const_float(v1) == get_const_float(v2));
-        case FCmpInst::NE:
-            return CONST_INT(get_const_float(v1) != get_const_float(v2));
-        case FCmpInst::GT:
-            return CONST_INT(get_const_float(v1) > get_const_float(v2));
-        case FCmpInst::GE:
-            return CONST_INT(get_const_float(v1) >= get_const_float(v2));
-        case FCmpInst::LT:
-            return CONST_INT(get_const_float(v1) < get_const_float(v2));
-        case FCmpInst::LE:
-            return CONST_INT(get_const_float(v1) <= get_const_float(v2));
-        }
+        return constFold(static_cast<FCmpInst *>(inst), v1, v2);
     default:
         return nullptr;
     }
@@ -105,61 +115,6 @@ void SCCP::execute() {
         sccp(f);
 }
 
-void SCCP::visitInst(Instruction *inst) {
-    auto *bb = inst->get_parent();
-    auto prev_status = value_map[inst];
-    auto cur_status = prev_status;
-    if (inst->is_phi()) {
-        const int phi_size = inst->get_num_operand() / 2;
-        for (int i = 0; i < phi_size; i++) {
-            auto *pre_bb =
-                static_cast<BasicBlock *>(inst->get_operand(2 * i + 1));
-            if (marked.count({pre_bb, bb}) != 0) {
-                auto *op = inst->get_operand(2 * i);
-                auto op_status = getMapped(op);
-                cur_status ^= op_status;
-            }
-        }
-    } else if (inst->is_br()) {
-        if (!static_cast<BranchInst *>(inst)->is_cond_br()) {
-            auto *jmp_bb = static_cast<BasicBlock *>(inst->get_operand(0));
-            cfg_worklist.emplace_back(bb, jmp_bb);
-        } else {
-            auto *true_bb = static_cast<BasicBlock *>(inst->get_operand(1));
-            auto *false_bb = static_cast<BasicBlock *>(inst->get_operand(2));
-            auto *const_cond = static_cast<ConstantInt *>(
-                getMapped(inst->get_operand(0)).value);
-            if (const_cond != nullptr) {
-                const_cond->get_value() != 0
-                    ? cfg_worklist.emplace_back(bb, true_bb)
-                    : cfg_worklist.emplace_back(bb, false_bb);
-            } else {
-                cfg_worklist.emplace_back(bb, true_bb);
-                cfg_worklist.emplace_back(bb, false_bb);
-            }
-        }
-    } else if (inst->is_binary() || inst->is_unary()) {
-        auto *folded = constFold(inst);
-        if (folded != nullptr) {
-            cur_status = {ValueStatus::CONST, folded};
-        } else {
-            cur_status = {ValueStatus::TOP};
-            for (auto *op : inst->get_operands())
-                if (value_map[op].is_bot())
-                    cur_status = {ValueStatus::BOT};
-        }
-    } else {
-        cur_status = {ValueStatus::BOT};
-    }
-    if (cur_status != prev_status) {
-        value_map[inst] = cur_status;
-        for (auto use : inst->get_use_list()) {
-            auto *use_inst = dynamic_cast<Instruction *>(use.val_);
-            ssa_worklist.push_back(use_inst);
-        }
-    }
-}
-
 void SCCP::sccp(Function *f) {
     if (f->is_declaration())
         return;
@@ -173,7 +128,7 @@ void SCCP::sccp(Function *f) {
 
     for (auto *bb : f->get_basic_blocks())
         for (auto *expr : bb->get_instructions())
-            value_map[expr] = {ValueStatus::TOP};
+            value_map.set(expr, {ValueStatus::TOP});
 
     auto i = 0U;
     auto j = 0U;
@@ -186,7 +141,7 @@ void SCCP::sccp(Function *f) {
             marked.insert({pre_bb, bb});
 
             for (auto *inst : bb->get_instructions())
-                visitInst(inst);
+                instruction_visitor->visit(inst);
         }
         while (j < ssa_worklist.size()) {
             auto *inst = ssa_worklist[j++];
@@ -194,7 +149,7 @@ void SCCP::sccp(Function *f) {
 
             for (auto *pre_bb : bb->get_pre_basic_blocks()) {
                 if (marked.count({pre_bb, bb}) != 0) {
-                    visitInst(inst);
+                    instruction_visitor->visit(inst);
                     break;
                 }
             }
@@ -231,5 +186,75 @@ void SCCP::replaceConstant(Function *f) {
             cond_br_to_jmp(branch_inst, true_bb, false_bb);
         else
             cond_br_to_jmp(branch_inst, false_bb, true_bb);
+    }
+}
+
+void InstructionVisitor::visit(Instruction *inst) {
+    inst_ = inst;
+    bb = inst->get_parent();
+    prev_status = value_map.get(inst);
+    cur_status = prev_status;
+
+    if (inst->is_phi()) {
+        visit_phi(static_cast<PhiInst *>(inst));
+    } else if (inst->is_br()) {
+        visit_br(static_cast<BranchInst *>(inst));
+    } else if (inst->is_binary() || inst->is_unary()) {
+        visit_foldable(inst);
+    } else {
+        cur_status = {ValueStatus::BOT};
+    }
+    if (cur_status != prev_status) {
+        value_map.set(inst, cur_status);
+        for (auto use : inst->get_use_list()) {
+            auto *use_inst = dynamic_cast<Instruction *>(use.val_);
+            ssa_worklist.push_back(use_inst);
+        }
+    }
+}
+
+void InstructionVisitor::visit_phi(PhiInst *inst) {
+    const int phi_size = inst->get_num_operand() / 2;
+    for (int i = 0; i < phi_size; i++) {
+        auto *pre_bb = static_cast<BasicBlock *>(inst->get_operand(2 * i + 1));
+        if (sccp.get_marked().count({pre_bb, bb}) != 0) {
+            auto *op = inst->get_operand(2 * i);
+            auto op_status = value_map.get(op);
+            cur_status ^= op_status;
+        }
+    }
+}
+
+void InstructionVisitor::visit_br(BranchInst *inst) {
+    if (!static_cast<BranchInst *>(inst)->is_cond_br()) {
+        auto *jmp_bb = static_cast<BasicBlock *>(inst->get_operand(0));
+        cfg_worklist.emplace_back(bb, jmp_bb);
+        return;
+    }
+    auto *true_bb = static_cast<BasicBlock *>(inst->get_operand(1));
+    auto *false_bb = static_cast<BasicBlock *>(inst->get_operand(2));
+    auto *const_cond =
+        static_cast<ConstantInt *>(value_map.get(inst->get_operand(0)).value);
+    if (const_cond != nullptr) {
+        const_cond->get_value() != 0 ? cfg_worklist.emplace_back(bb, true_bb)
+                                     : cfg_worklist.emplace_back(bb, false_bb);
+    } else {
+        cfg_worklist.emplace_back(bb, true_bb);
+        cfg_worklist.emplace_back(bb, false_bb);
+    }
+}
+
+void InstructionVisitor::visit_foldable(Instruction *inst) {
+    auto *folded = sccp.constFold(inst);
+    if (folded != nullptr) {
+        cur_status = {ValueStatus::CONST, folded};
+        return;
+    }
+    cur_status = {ValueStatus::TOP};
+    for (auto *op : inst->get_operands()) {
+        if (value_map.get(op).is_bot()) {
+            cur_status = {ValueStatus::BOT};
+            return;
+        }
     }
 }

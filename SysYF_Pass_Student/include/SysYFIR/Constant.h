@@ -6,7 +6,8 @@ class Constant : public User {
   private:
     // int value;
   public:
-    Constant(Type *ty, const std::string &name = "", unsigned num_ops = 0)
+    explicit Constant(Type *ty, const std::string &name = "",
+                      unsigned num_ops = 0)
         : User(ty, name, num_ops) {}
     ~Constant() = default;
 };
@@ -18,10 +19,10 @@ class ConstantInt : public Constant {
 
   public:
     static int get_value(ConstantInt *const_val) { return const_val->value_; }
-    int get_value() { return value_; }
+    [[nodiscard]] int get_value() const { return value_; }
     static ConstantInt *get(int val, Module *m);
     static ConstantInt *get(bool val, Module *m);
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class ConstantFloat : public Constant {
@@ -33,9 +34,9 @@ class ConstantFloat : public Constant {
     static float get_value(ConstantFloat *const_val) {
         return const_val->value_;
     }
-    float get_value() { return value_; }
+    [[nodiscard]] float get_value() const { return value_; }
     static ConstantFloat *get(float val, Module *m);
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class ConstantArray : public Constant {
@@ -54,16 +55,16 @@ class ConstantArray : public Constant {
     static ConstantArray *get(ArrayType *ty,
                               const std::vector<Constant *> &val);
 
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 class ConstantZero : public Constant {
   private:
-    ConstantZero(Type *ty) : Constant(ty, "", 0) {}
+    explicit ConstantZero(Type *ty) : Constant(ty, "", 0) {}
 
   public:
     static ConstantZero *get(Type *ty, Module *m);
-    virtual std::string print() override;
+    std::string print() override;
 };
 
 #endif //_SYSYF_CONSTANT_H_

@@ -2,6 +2,9 @@
 #define SYSYF_SCCP_H
 
 #include "Pass.h"
+#include <memory>
+
+class InstructionVisitor;
 
 static inline int get_const_int(Value *constant) {
     return static_cast<ConstantInt *>(constant)->get_value();
@@ -56,33 +59,83 @@ struct ValueStatus {
     }
 };
 
-class SCCP : public Pass {
-  public:
-    explicit SCCP(Module *module) : Pass(module) {}
-    void execute() final;
-    void sccp(Function *f);
-    [[nodiscard]] std::string get_name() const override { return name; }
-
+class ValueMap {
   private:
-    const std::string name = "SCCP";
-    void visitInst(Instruction *inst);
-    void replaceConstant(Function *f);
-
-    Constant *constFold(Instruction *inst, Constant *v1, Constant *v2);
-    Constant *constFold(Instruction *inst, Constant *v);
-    Constant *constFold(Instruction *inst);
-
     std::map<Value *, ValueStatus> value_map;
 
-    ValueStatus getMapped(Value *key) {
+  public:
+    void clear() { value_map.clear(); }
+    ValueStatus get(Value *key) {
         if (auto *constant = dynamic_cast<Constant *>(key))
             return {ValueStatus::CONST, constant};
         return value_map[key];
     }
+    void set(Value *key, ValueStatus value) { value_map[key] = value; }
+};
+
+class SCCP : public Pass {
+  public:
+    explicit SCCP(Module *module) : Pass(module) {
+        instruction_visitor = std::make_unique<InstructionVisitor>(*this);
+    }
+    void execute() final;
+    void sccp(Function *f);
+    [[nodiscard]] std::string get_name() const override { return name; }
+
+    std::set<std::pair<BasicBlock *, BasicBlock *>> &get_marked() {
+        return marked;
+    }
+    ValueMap &get_value_map() { return value_map; }
+    std::vector<std::pair<BasicBlock *, BasicBlock *>> &get_cfg_worklist() {
+        return cfg_worklist;
+    }
+    std::vector<Instruction *> &get_ssa_worklist() { return ssa_worklist; }
+
+    Constant *constFold(Instruction *inst);
+
+  private:
+    const std::string name = "SCCP";
+
+    Constant *constFold(CmpInst *inst, Constant *v1, Constant *v2);
+    Constant *constFold(FCmpInst *inst, Constant *v1, Constant *v2);
+    Constant *constFold(Instruction *inst, Constant *v1, Constant *v2);
+    Constant *constFold(Instruction *inst, Constant *v);
+
+    ValueMap value_map;
+    ValueStatus getMapped(Value *key) { return value_map.get(key); }
+
+    void replaceConstant(Function *f);
 
     std::set<std::pair<BasicBlock *, BasicBlock *>> marked;
     std::vector<std::pair<BasicBlock *, BasicBlock *>> cfg_worklist;
     std::vector<Instruction *> ssa_worklist;
+
+    std::unique_ptr<InstructionVisitor> instruction_visitor;
+};
+
+class InstructionVisitor {
+  public:
+    explicit InstructionVisitor(SCCP &sccp_pass)
+        : sccp(sccp_pass), value_map(sccp_pass.get_value_map()),
+          cfg_worklist(sccp_pass.get_cfg_worklist()),
+          ssa_worklist(sccp_pass.get_ssa_worklist()) {}
+    void visit(Instruction *inst);
+
+  private:
+    SCCP &sccp;
+
+    ValueMap &value_map;
+    std::vector<std::pair<BasicBlock *, BasicBlock *>> &cfg_worklist;
+    std::vector<Instruction *> &ssa_worklist;
+
+    Instruction *inst_;
+    BasicBlock *bb;
+    ValueStatus prev_status;
+    ValueStatus cur_status;
+
+    void visit_phi(PhiInst *inst);
+    void visit_br(BranchInst *inst);
+    void visit_foldable(Instruction *inst);
 };
 
 #endif // SYSYF_SCCP_H

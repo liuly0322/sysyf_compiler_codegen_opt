@@ -13,7 +13,7 @@ class BasicBlock : public Value {
   public:
     static BasicBlock *create(Module *m, const std::string &name,
                               Function *parent) {
-        auto prefix = name.empty() ? "" : "label_";
+        const auto *prefix = name.empty() ? "" : "label_";
         return new BasicBlock(m, prefix + name, parent);
     }
 
@@ -47,7 +47,7 @@ class BasicBlock : public Value {
 
     /// Returns the terminator instruction if the block is well formed or null
     /// if the block is not well formed.
-    const Instruction *get_terminator() const;
+    [[nodiscard]] const Instruction *get_terminator() const;
     Instruction *get_terminator() {
         return const_cast<Instruction *>(
             static_cast<const BasicBlock *>(this)->get_terminator());
@@ -69,7 +69,7 @@ class BasicBlock : public Value {
 
     void erase_from_parent();
 
-    virtual std::string print() override;
+    std::string print() override;
 
     /****************api about dominate tree****************/
     void set_idom(BasicBlock *bb) { idom_ = bb; }
@@ -84,8 +84,8 @@ class BasicBlock : public Value {
     std::set<BasicBlock *> &get_dom_frontier() { return dom_frontier_; }
     std::set<BasicBlock *> &get_rdom_frontier() { return rdom_frontier_; }
     std::set<BasicBlock *> &get_rdoms() { return rdoms_; }
-    void set_live_in(std::set<Value *> in) { live_in = in; }
-    void set_live_out(std::set<Value *> out) { live_out = out; }
+    void set_live_in(std::set<Value *> in) { live_in = std::move(in); }
+    void set_live_out(std::set<Value *> out) { live_out = std::move(out); }
     std::set<Value *> &get_live_in() { return live_in; }
     std::set<Value *> &get_live_out() { return live_out; }
 

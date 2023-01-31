@@ -81,26 +81,31 @@ class CSE : public Pass {
     std::vector<std::pair<Instruction *, Value *>> forwarded_load;
     const std::string name = "CSE";
 
-  public:
-    explicit CSE(Module *m) : Pass(m){};
-    void execute() final;
     static Value *findOrigin(Value *val);
     static Instruction *isAppear(Instruction *inst,
                                  std::vector<Instruction *> &insts, int index);
     static bool isKill(Instruction *inst1, Instruction *inst2);
     static bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
                        unsigned index);
+
     void forwardStore();
     void deleteForward();
+
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
+
     void calcGenKill(Function *fun);
+    void calcAvailable(Function *fun);
+    void calcGen(Function *fun);
+    void calcKill(Function *fun);
+
     void calcInOut(Function *fun);
+
     void findSource(Function *fun);
     void replaceSubExpr(Function *fun);
+
     void deleteInstr();
 
-    [[nodiscard]] std::string get_name() const override { return name; }
     static bool isOptimizable(Instruction *inst) {
         if (inst->is_void() || inst->is_alloca())
             return false;
@@ -110,6 +115,11 @@ class CSE : public Pass {
         }
         return true;
     }
+
+  public:
+    explicit CSE(Module *m) : Pass(m){};
+    void execute() final;
+    [[nodiscard]] std::string get_name() const override { return name; }
 };
 
 #endif // SYSYF_CSE_H

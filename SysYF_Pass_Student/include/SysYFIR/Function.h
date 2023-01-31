@@ -21,16 +21,16 @@ class Function : public Value {
     static Function *create(FunctionType *ty, const std::string &name,
                             Module *parent);
 
-    FunctionType *get_function_type() const;
+    [[nodiscard]] FunctionType *get_function_type() const;
 
-    Type *get_return_type() const;
+    [[nodiscard]] Type *get_return_type() const;
 
     void add_basic_block(BasicBlock *bb);
 
-    unsigned get_num_of_args() const;
-    unsigned get_num_basic_blocks() const;
+    [[nodiscard]] unsigned get_num_of_args() const;
+    [[nodiscard]] unsigned get_num_basic_blocks() const;
 
-    Module *get_parent() const;
+    [[nodiscard]] Module *get_parent() const;
 
     std::list<Argument *>::iterator arg_begin() { return arguments_.begin(); }
     std::list<Argument *>::iterator arg_end() { return arguments_.end(); }
@@ -47,12 +47,11 @@ class Function : public Value {
     std::set<int> &get_unused_reg_num() { return unused_reg_num_; }
 
     void set_instr_name();
-    std::string print();
+    std::string print() override;
 
   private:
     void build_args();
 
-  private:
     std::list<BasicBlock *> basic_blocks_; // basic blocks
     std::list<Argument *> arguments_;      // arguments
     std::vector<std::set<Value *>> vreg_set_;
@@ -72,20 +71,20 @@ class Argument : public Value {
     explicit Argument(Type *ty, const std::string &name = "",
                       Function *f = nullptr, unsigned arg_no = 0)
         : Value(ty, name), parent_(f), arg_no_(arg_no) {}
-    ~Argument() {}
+    ~Argument() = default;
 
-    inline const Function *get_parent() const { return parent_; }
+    [[nodiscard]] inline const Function *get_parent() const { return parent_; }
     inline Function *get_parent() { return parent_; }
 
     /// For example in "void foo(int a, float b)" a is 0 and b is 1.
-    unsigned get_arg_no() const {
+    [[nodiscard]] unsigned get_arg_no() const {
 #ifdef DEBUG
         assert(parent_ && "can't get number of unparented arg");
 #endif
         return arg_no_;
     }
 
-    virtual std::string print() override;
+    std::string print() override;
 
   private:
     Function *parent_;
