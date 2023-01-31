@@ -8,6 +8,9 @@
 <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml">
   <img src="https://github.com/liuly0322/sysyf_compiler_codegen_opt/actions/workflows/CI.yml/badge.svg">
 </a>
+<a href="https://www.codefactor.io/repository/github/liuly0322/sysyf_compiler_codegen_opt">
+  <img src="https://img.shields.io/codefactor/grade/github/liuly0322/sysyf_compiler_codegen_opt/main">
+</a>
 </p>
 
 <p align="center">
