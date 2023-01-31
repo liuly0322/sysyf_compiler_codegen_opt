@@ -146,48 +146,40 @@
           <label for="horns">死代码消除</label>
         </div>
       </fieldset>
-      <textarea name="sy_code" id="sy_code" rows="20" style="width: 100%; margin: 1em 0;">
-// n = 10
-const int n = 1 + 2 + 3 + 4;
-int bubblesort(int arr[])
-{
-    int i;
-    int j;
-    i = 0; 
-    while(i &lt; n-1){
-    // Last i elements are already in place
-        j = 0;
-        while(j &lt; n-i-1){
-            if (arr[j] &gt; arr[j+1]) {
-                // swap(&amp;arr[j], &amp;arr[j+1]); 
-                int tmp;
-                tmp = arr[j+1];
-                arr[j+1] = arr[j];
-                arr[j] = tmp;
-            }
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-    return 0;
+      <textarea name="sy_code" id="sy_code" rows="20" style="width: 100%; margin: 1em 0;">int sum_of_two_elements(int a[]) {
+    return a[0] + a[1];
 }
 
-int main(){
-    // n is const
-    int a[n];
-    a[0]=4;a[1]=3;a[2]=9;a[3]=2;a[4]=0;
-    a[5]=1;a[6]=6;a[7]=5;a[8]=7;a[9]=8;
-    int i;
-    i = bubblesort(a);
-    while (i &lt; n) {
-        int tmp;
-        tmp = a[i];
-        putint(tmp);
-        tmp = 10;
-        putch(tmp);
-        i = i + 1;
+int sum_of_three_elements(int a[]) {
+    return a[0] + a[1] + a[2];
+}
+
+int main() {
+    int a[3] = {1, 1, 4};
+
+    // main 的返回值。纯函数调用，不会注销数组元素的 store 定值
+    int ret = sum_of_two_elements(a);
+    // 无用变量，且是纯函数调用，可以作为死代码消除
+    int useless = sum_of_three_elements(a);
+
+    // 经过公共子表达式消除（store-load 转发），数组元素的值是确定的
+    // 再经常量传播计算出实参
+    putint(114514 + a[0] + a[1] + a[2]);
+    putch(10);
+
+    // 同理经过公共子表达式消除和常量传播后，可以判断此处是无用控制流
+    // 因此作为死代码消除
+    if (a[0] != 1) {
+        a[1] = 114514;
+        return 0;
     }
-    return 0;
+    
+    // 再次检验 store-load 转发
+    a[0] = -114514;
+    putint(114514 + a[0] + a[1] + a[2]);
+    putch(10);
+
+    return ret;   
 }
       </textarea>
       <div style="display: flex; align-items: center; justify-content: space-between;">
