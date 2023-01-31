@@ -3,6 +3,9 @@
 #include "IRStmtBuilder.h"
 #include "SyntaxTree.h"
 
+#define CONST_INT(num) ConstantInt::get(num, module.get())
+#define CONST_FLOAT(num) ConstantFloat::get(num, module.get())
+
 class Scope {
   public:
     // enter a new scope
@@ -72,11 +75,18 @@ struct BinOp {
         : bin_op(bin_op), flag(isBinOp){};
     explicit BinOp(const SyntaxTree::BinaryCondOp &bin_cond_op)
         : bin_cond_op(bin_cond_op), flag(isBinCondOp){};
+    [[nodiscard]] bool isCondOp() const { return flag == isBinCondOp; }
 };
 
 class IRBuilder : public SyntaxTree::Visitor {
   private:
+    ConstantInt *CONST(int num) { return CONST_INT(num); }
+    ConstantFloat *CONST(float num) { return CONST_FLOAT(num); }
+    Value *typeConvertConstant(Constant *expr, Type *expected);
     Value *typeConvert(Value *prev_expr, Type *);
+    template <typename T> void binOpGenConstantT(T lhs, T rhs, BinOp op);
+    void binOpGenConstant(Constant *, Constant *, BinOp);
+    void binOpGenCreateInst(Value *, Value *, BinOp);
     void binOpGen(Value *, Value *, BinOp);
     void visit(SyntaxTree::InitVal &) final;
     void visit(SyntaxTree::Assembly &) final;
