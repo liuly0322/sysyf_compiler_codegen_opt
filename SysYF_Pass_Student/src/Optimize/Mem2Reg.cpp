@@ -94,67 +94,61 @@ void Mem2Reg::genPhi() {
     }
 }
 
-std::map<Value *, std::vector<Value *>> value_status;
+std::map<Value *, std::vector<Value *>> value_stack;
 std::set<BasicBlock *> visited;
+
+std::vector<Value *> Mem2Reg::collectValueDefine(BasicBlock *bb) {
+    auto delete_list = std::vector<Instruction *>{};
+    auto define_var = std::vector<Value *>{};
+    for (auto *inst : bb->get_instructions()) {
+        if (inst->is_phi()) {
+            auto *lvalue = dynamic_cast<PhiInst *>(inst)->get_lval();
+            define_var.push_back(lvalue);
+            value_stack[lvalue].push_back(inst);
+        }
+        if (!isVarOp(inst))
+            continue;
+        delete_list.push_back(inst);
+        if (inst->is_load()) {
+            auto *lvalue = static_cast<LoadInst *>(inst)->get_lval();
+            auto *new_value = value_stack[lvalue].back();
+            inst->replace_all_use_with(new_value);
+        } else if (inst->is_store()) {
+            auto *lvalue = dynamic_cast<StoreInst *>(inst)->get_lval();
+            auto *rvalue = static_cast<StoreInst *>(inst)->get_rval();
+            define_var.push_back(lvalue);
+            value_stack[lvalue].push_back(rvalue);
+        }
+    }
+    for (auto *inst : delete_list)
+        bb->delete_instr(inst);
+    return define_var;
+}
 
 void Mem2Reg::valueForwarding(BasicBlock *bb) {
     visited.insert(bb);
-    std::set<Instruction *> delete_list;
 
-    // φ 指令给地址定值
-    for (auto *inst : bb->get_instructions()) {
-        if (!inst->is_phi())
-            break;
-        auto *lvalue = dynamic_cast<PhiInst *>(inst)->get_lval();
-        value_status[lvalue].push_back(inst);
-    }
+    auto define_var = collectValueDefine(bb);
 
-    for (auto *inst : bb->get_instructions()) {
-        if (!isVarOp(inst))
-            continue;
-        // 传播，用地址定值替换不必要的 load 和 store
-        if (inst->is_load()) {
-            Value *lvalue = static_cast<LoadInst *>(inst)->get_lval();
-            Value *new_value = value_status[lvalue].back();
-            inst->replace_all_use_with(new_value);
-        } else if (inst->is_store()) {
-            Value *lvalue = static_cast<StoreInst *>(inst)->get_lval();
-            Value *rvalue = static_cast<StoreInst *>(inst)->get_rval();
-            value_status[lvalue].push_back(rvalue);
-        }
-        delete_list.insert(inst);
-    }
-
-    // 给 bb 的后继基本块的 φ 指令确定来源
     for (auto *succbb : bb->get_succ_basic_blocks()) {
         for (auto *inst : succbb->get_instructions()) {
             if (!inst->is_phi())
                 break;
             auto *phi = dynamic_cast<PhiInst *>(inst);
             auto *lvalue = phi->get_lval();
-            // φ 来源是地址在当前基本块的定值
-            if (value_status.find(lvalue) != value_status.end()) {
-                if (!value_status[lvalue].empty()) {
-                    Value *new_value = value_status[lvalue].back();
-                    phi->add_phi_pair_operand(new_value, bb);
-                }
+            if (!value_stack[lvalue].empty()) {
+                auto *new_value = value_stack[lvalue].back();
+                phi->add_phi_pair_operand(new_value, bb);
             }
         }
     }
 
-    // 递归访问后续 bb
     for (auto *succbb : bb->get_succ_basic_blocks())
         if (visited.count(succbb) == 0)
             valueForwarding(succbb);
 
-    // 删除定值
-    auto var_set = collectValueDefine(bb);
-    for (auto *var : var_set)
-        if (!value_status[var].empty())
-            value_status[var].pop_back();
-
-    for (auto *inst : delete_list)
-        bb->delete_instr(inst);
+    for (auto *var : define_var)
+        value_stack[var].pop_back();
 }
 
 void Mem2Reg::removeAlloc() {

@@ -15,6 +15,7 @@ class Mem2Reg : public Pass {
     void execute() final;
     void genPhi();
     void insideBlockForwarding();
+    static std::vector<Value *> collectValueDefine(BasicBlock *bb);
     void valueForwarding(BasicBlock *bb);
     void removeAlloc();
     [[nodiscard]] std::string get_name() const override { return name; }
@@ -33,22 +34,6 @@ class Mem2Reg : public Pass {
             isVar &= dynamic_cast<GlobalVariable *>(lvalue) == nullptr;
         }
         return isVar;
-    }
-
-    static std::vector<Value *> collectValueDefine(BasicBlock *bb) {
-        auto define_var = std::vector<Value *>{};
-        for (auto *inst : bb->get_instructions()) {
-            if (inst->is_phi()) {
-                auto *lvalue = dynamic_cast<PhiInst *>(inst)->get_lval();
-                define_var.push_back(lvalue);
-            } else if (inst->is_store()) {
-                if (!isVarOp(inst))
-                    continue;
-                auto *lvalue = dynamic_cast<StoreInst *>(inst)->get_lval();
-                define_var.push_back(lvalue);
-            }
-        }
-        return define_var;
     }
 };
 

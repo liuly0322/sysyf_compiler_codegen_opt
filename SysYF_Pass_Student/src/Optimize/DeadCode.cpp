@@ -178,17 +178,18 @@ bool Cleaner::clean(Function *f) {
 
     do {
         cleaned = false;
-        visited.clear();
         postTraverseBasicBlocks();
     } while (cleaned);
+    cleanUnreachable();
 
-    return cleanUnreachable() || ever_cleaned;
+    return ever_cleaned;
 }
 
 void Cleaner::postTraverseBasicBlocks() {
     auto worklist = std::vector<BasicBlock *>{};
-    std::function<void(BasicBlock *)> collectPostOrder;
-    collectPostOrder = [&](BasicBlock *i) {
+    visited.clear();
+
+    std::function<void(BasicBlock *)> collectPostOrder = [&](BasicBlock *i) {
         if (visited.count(i) != 0)
             return;
         visited.insert(i);
@@ -198,9 +199,9 @@ void Cleaner::postTraverseBasicBlocks() {
         worklist.push_back(i);
     };
     collectPostOrder(f_->get_entry_block());
-    for (auto *bb : worklist) {
+
+    for (auto *bb : worklist)
         visitBasicBlock(bb);
-    }
 }
 
 void Cleaner::visitBasicBlock(BasicBlock *i) {
@@ -328,16 +329,13 @@ void Cleaner::hoistBranches(BasicBlock *i, BasicBlock *j) {
     connectHoisting(i, j, false_bb);
 }
 
-bool Cleaner::cleanUnreachable() {
+void Cleaner::cleanUnreachable() {
     auto delete_list = std::vector<BasicBlock *>{};
-
     for (auto *bb : f_->get_basic_blocks()) {
         if (visited.count(bb) == 0)
             delete_list.push_back(bb);
     }
-
     for (auto *bb : delete_list)
         f_->remove(bb);
-
-    return !delete_list.empty();
+    ever_cleaned |= !delete_list.empty();
 }

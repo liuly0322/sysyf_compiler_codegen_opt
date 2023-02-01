@@ -7,12 +7,28 @@ class ActiveVar : public Pass {
   public:
     explicit ActiveVar(Module *module) : Pass(module) {}
     void execute() final;
+    void checkFun(Function *f);
     [[nodiscard]] std::string get_name() const override { return name; }
     void dump();
 
   private:
-    Function *func_;
     const std::string name = "ActiveVar";
+
+    BasicBlock *exit_block;
+    bool changed;
+    std::set<Value *> def;
+    std::set<Value *> use;
+    std::map<BasicBlock *, std::set<Value *>> IN;
+    std::map<BasicBlock *, std::set<Value *>> OUT;
+
+    static bool localOp(Value *value) {
+        return dynamic_cast<GlobalVariable *>(value) == nullptr;
+    }
+    static BasicBlock *findExitBlock(Function *f);
+    void calcDefUse(BasicBlock *bb);
+    std::set<Value *> calcIn(BasicBlock *bb);
+    std::set<Value *> calcOut(BasicBlock *bb);
+    void calcInOut(Function *f);
 };
 
 bool ValueCmp(Value *a, Value *b);

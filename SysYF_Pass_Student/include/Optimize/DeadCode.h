@@ -60,7 +60,7 @@ class Cleaner {
     void combineBasicBlocks(BasicBlock *i, BasicBlock *j);
     static void connectHoisting(BasicBlock *i, BasicBlock *j, BasicBlock *dst);
     void hoistBranches(BasicBlock *i, BasicBlock *j);
-    bool cleanUnreachable();
+    void cleanUnreachable();
 
   private:
     Function *f_;
