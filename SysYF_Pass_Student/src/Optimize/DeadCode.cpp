@@ -72,11 +72,7 @@ void DeadCode::mark(Function *f) {
                 worklist.push_back(inst);
             } else if (inst->is_store()) {
                 auto *lval = PureFunction::store_to_alloca(inst);
-                if (lval_store.count(lval) != 0) {
-                    lval_store[lval].insert(static_cast<StoreInst *>(inst));
-                } else {
-                    lval_store[lval] = {static_cast<StoreInst *>(inst)};
-                }
+                lval_store[lval].insert(static_cast<StoreInst *>(inst));
             }
         }
     }

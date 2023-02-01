@@ -5,6 +5,7 @@
 #include <iostream>
 #include <list>
 #include <string>
+#include <utility>
 
 class Value;
 
@@ -19,20 +20,20 @@ class Value {
     explicit Value(Type *ty, const std::string &name = "");
     ~Value() = default;
 
-    Type *get_type() const { return type_; }
+    [[nodiscard]] Type *get_type() const { return type_; }
 
     std::list<Use> &get_use_list() { return use_list_; }
 
     void add_use(Value *val, unsigned arg_no = 0);
 
     bool set_name(std::string name) {
-        if (name_ == "") {
-            name_ = name;
+        if (name_.empty()) {
+            name_ = std::move(name);
             return true;
         }
         return false;
     }
-    std::string get_name() const;
+    [[nodiscard]] std::string get_name() const;
 
     void replace_all_use_with(Value *new_val);
     void remove_use(Value *val);

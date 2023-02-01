@@ -84,8 +84,8 @@ class BasicBlock : public Value {
     std::set<BasicBlock *> &get_dom_frontier() { return dom_frontier_; }
     std::set<BasicBlock *> &get_rdom_frontier() { return rdom_frontier_; }
     std::set<BasicBlock *> &get_rdoms() { return rdoms_; }
-    void set_live_in(std::set<Value *> in) { live_in = std::move(in); }
-    void set_live_out(std::set<Value *> out) { live_out = std::move(out); }
+    void set_live_in(std::set<Value *> &in) { live_in = in; }
+    void set_live_out(std::set<Value *> &out) { live_out = out; }
     std::set<Value *> &get_live_in() { return live_in; }
     std::set<Value *> &get_live_out() { return live_out; }
 

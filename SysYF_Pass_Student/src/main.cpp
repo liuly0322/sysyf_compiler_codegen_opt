@@ -45,8 +45,9 @@ int main(int argc, char *argv[]) {
         if (argv[i] == std::string("-h") || argv[i] == std::string("--help")) {
             print_help(argv[0]);
             return 0;
-        } else if (argv[i] == std::string("-p") ||
-                   argv[i] == std::string("--trace_parsing")) {
+        }
+        if (argv[i] == std::string("-p") ||
+            argv[i] == std::string("--trace_parsing")) {
             driver.trace_parsing = true;
         } else if (argv[i] == std::string("-s") ||
                    argv[i] == std::string("--trace_scanning")) {
@@ -85,7 +86,7 @@ int main(int argc, char *argv[]) {
             filename = argv[i];
         }
     }
-    auto root = driver.parse(filename);
+    auto *root = driver.parse(filename);
     if (print_ast)
         root->accept(printer);
     if (check)

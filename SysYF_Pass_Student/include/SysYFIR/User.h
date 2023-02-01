@@ -7,19 +7,19 @@
 
 class User : public Value {
   public:
-    User(Type *ty, const std::string &name = "", unsigned num_ops = 0);
+    explicit User(Type *ty, const std::string &name = "", unsigned num_ops = 0);
     ~User() = default;
 
     std::vector<Value *> &get_operands();
 
     // start from 0
-    Value *get_operand(unsigned i) const;
+    [[nodiscard]] Value *get_operand(unsigned i) const;
 
     // start from 0
     void set_operand(unsigned i, Value *v);
     void add_operand(Value *v);
 
-    unsigned get_num_operand() const;
+    [[nodiscard]] unsigned get_num_operand() const;
 
     void remove_use_of_ops();
     void remove_operands(unsigned index1, unsigned index2);

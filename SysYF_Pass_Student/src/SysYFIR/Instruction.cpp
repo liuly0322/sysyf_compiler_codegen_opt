@@ -27,7 +27,7 @@ BinaryInst::BinaryInst(Type *ty, OpID id, Value *v1, Value *v2, BasicBlock *bb)
 }
 
 BinaryInst *BinaryInst::create_add(Value *v1, Value *v2, BasicBlock *bb,
-                                   Module *m) {
+                                   Module * /*m*/) {
     return new BinaryInst(v1->get_type()->is_pointer_type() ? v1->get_type()
                                                             : v2->get_type(),
                           Instruction::add, v1, v2, bb);
@@ -173,7 +173,7 @@ CallInst::CallInst(Function *func, std::vector<Value *> args, BasicBlock *bb)
 #ifdef DEBUG
     assert(func->get_num_of_args() == args.size());
 #endif
-    int num_ops = args.size() + 1;
+    const int num_ops = args.size() + 1;
     set_operand(0, func);
     for (int i = 1; i < num_ops; i++) {
         set_operand(i, args[i - 1]);
@@ -182,13 +182,13 @@ CallInst::CallInst(Function *func, std::vector<Value *> args, BasicBlock *bb)
 
 CallInst::CallInst(Type *ret_ty, std::vector<Value *> args, BasicBlock *bb)
     : Instruction(ret_ty, Instruction::call, args.size() + 1, bb) {
-    int num_ops = args.size() + 1;
+    const int num_ops = args.size() + 1;
     for (int i = 1; i < num_ops; i++) {
         set_operand(i, args[i - 1]);
     }
 }
 
-CallInst *CallInst::create(Function *func, std::vector<Value *> args,
+CallInst *CallInst::create(Function *func, std::vector<Value *> &args,
                            BasicBlock *bb) {
     return new CallInst(func, args, bb);
 }
@@ -331,11 +331,10 @@ GetElementPtrInst::GetElementPtrInst(Value *ptr, std::vector<Value *> idxs,
 }
 
 Type *GetElementPtrInst::get_element_type(Value *ptr,
-                                          std::vector<Value *> idxs) {
-
+                                          std::vector<Value *> &idxs) {
     Type *ty = ptr->get_type()->get_pointer_element_type();
     if (ty->is_array_type()) {
-        ArrayType *arr_ty = static_cast<ArrayType *>(ty);
+        auto *arr_ty = static_cast<ArrayType *>(ty);
         for (auto i = 1U; i < idxs.size(); i++) {
             ty = arr_ty->get_element_type();
             if (i < idxs.size() - 1) {
@@ -354,7 +353,7 @@ Type *GetElementPtrInst::get_element_type(Value *ptr,
 Type *GetElementPtrInst::get_element_type() const { return element_ty_; }
 
 GetElementPtrInst *GetElementPtrInst::create_gep(Value *ptr,
-                                                 std::vector<Value *> idxs,
+                                                 std::vector<Value *> &idxs,
                                                  BasicBlock *bb) {
     return new GetElementPtrInst(ptr, idxs, bb);
 }
@@ -552,9 +551,7 @@ PhiInst::PhiInst(OpID op, std::vector<Value *> vals,
 }
 
 PhiInst *PhiInst::create_phi(Type *ty, BasicBlock *bb) {
-    std::vector<Value *> vals;
-    std::vector<BasicBlock *> val_bbs;
-    return new PhiInst(Instruction::phi, vals, val_bbs, ty, bb);
+    return new PhiInst(Instruction::phi, {}, {}, ty, bb);
 }
 
 std::string PhiInst::print() {
@@ -577,7 +574,7 @@ std::string PhiInst::print() {
     }
     if (this->get_num_operand() / 2 <
         this->get_parent()->get_pre_basic_blocks().size()) {
-        for (auto pre_bb : this->get_parent()->get_pre_basic_blocks()) {
+        for (auto *pre_bb : this->get_parent()->get_pre_basic_blocks()) {
             if (std::find(this->get_operands().begin(),
                           this->get_operands().end(),
                           static_cast<Value *>(pre_bb)) ==

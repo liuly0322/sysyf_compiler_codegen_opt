@@ -84,9 +84,10 @@ class IRBuilder : public SyntaxTree::Visitor {
     ConstantFloat *CONST(float num) { return CONST_FLOAT(num); }
     Value *typeConvertConstant(Constant *expr, Type *expected);
     Value *typeConvert(Value *prev_expr, Type *);
-    template <typename T> void binOpGenConstantT(T lhs, T rhs, BinOp op);
-    void binOpGenConstant(Constant *, Constant *, BinOp);
-    void binOpGenCreateInst(Value *, Value *, BinOp);
+    template <typename T> Value *binOpGenConstantT(T lhs, T rhs, BinOp op);
+    Value *binOpGenConstant(Constant *, Constant *, BinOp);
+    Value *binOpGenCreateInst(Value *, Value *, BinOp);
+    Value *binOpGenCreateCondInst(Value *, Value *, BinOp);
     void binOpGen(Value *, Value *, BinOp);
     void visit(SyntaxTree::InitVal &) final;
     void visit(SyntaxTree::Assembly &) final;

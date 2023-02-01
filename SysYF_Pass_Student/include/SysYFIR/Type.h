@@ -26,21 +26,35 @@ class Type {
     explicit Type(TypeID tid, Module *m);
     ~Type() = default;
 
-    TypeID get_type_id() const { return tid_; }
+    [[nodiscard]] TypeID get_type_id() const { return tid_; }
 
-    bool is_void_type() const { return get_type_id() == VoidTyID; }
+    [[nodiscard]] bool is_void_type() const {
+        return get_type_id() == VoidTyID;
+    }
 
-    bool is_label_type() const { return get_type_id() == LabelTyID; }
+    [[nodiscard]] bool is_label_type() const {
+        return get_type_id() == LabelTyID;
+    }
 
-    bool is_integer_type() const { return get_type_id() == IntegerTyID; }
+    [[nodiscard]] bool is_integer_type() const {
+        return get_type_id() == IntegerTyID;
+    }
 
-    bool is_float_type() const { return get_type_id() == FloatTyID; }
+    [[nodiscard]] bool is_float_type() const {
+        return get_type_id() == FloatTyID;
+    }
 
-    bool is_function_type() const { return get_type_id() == FunctionTyID; }
+    [[nodiscard]] bool is_function_type() const {
+        return get_type_id() == FunctionTyID;
+    }
 
-    bool is_array_type() const { return get_type_id() == ArrayTyID; }
+    [[nodiscard]] bool is_array_type() const {
+        return get_type_id() == ArrayTyID;
+    }
 
-    bool is_pointer_type() const { return get_type_id() == PointerTyID; }
+    [[nodiscard]] bool is_pointer_type() const {
+        return get_type_id() == PointerTyID;
+    }
 
     static bool is_eq_type(Type *ty1, Type *ty2);
 
@@ -91,7 +105,7 @@ class IntegerType : public Type {
 
 class FloatType : public Type {
   public:
-    FloatType(Module *m);
+    explicit FloatType(Module *m);
     static FloatType *get(Module *m);
 };
 
@@ -104,12 +118,12 @@ class FunctionType : public Type {
 
     static FunctionType *get(Type *result, std::vector<Type *> params);
 
-    unsigned get_num_of_args() const;
+    [[nodiscard]] unsigned get_num_of_args() const;
 
-    Type *get_param_type(unsigned i) const;
+    [[nodiscard]] Type *get_param_type(unsigned i) const;
     std::vector<Type *>::iterator param_begin() { return args_.begin(); }
     std::vector<Type *>::iterator param_end() { return args_.end(); }
-    Type *get_return_type() const;
+    [[nodiscard]] Type *get_return_type() const;
 
   private:
     Type *result_;
@@ -124,8 +138,8 @@ class ArrayType : public Type {
 
     static ArrayType *get(Type *contained, unsigned num_elements);
 
-    Type *get_element_type() const { return contained_; }
-    unsigned get_num_of_elements() const { return num_elements_; }
+    [[nodiscard]] Type *get_element_type() const { return contained_; }
+    [[nodiscard]] unsigned get_num_of_elements() const { return num_elements_; }
 
   private:
     Type *contained_;       // The element type of the array.
@@ -134,8 +148,8 @@ class ArrayType : public Type {
 
 class PointerType : public Type {
   public:
-    PointerType(Type *contained);
-    Type *get_element_type() const { return contained_; }
+    explicit PointerType(Type *contained);
+    [[nodiscard]] Type *get_element_type() const { return contained_; }
 
     static PointerType *get(Type *contained);
 

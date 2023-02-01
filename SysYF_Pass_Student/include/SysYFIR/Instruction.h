@@ -214,7 +214,7 @@ class CallInst : public Instruction {
     CallInst(Type *ret_ty, std::vector<Value *> args, BasicBlock *bb);
 
   public:
-    static CallInst *create(Function *func, std::vector<Value *> args,
+    static CallInst *create(Function *func, std::vector<Value *> &args,
                             BasicBlock *bb);
     [[nodiscard]] FunctionType *get_function_type() const;
 
@@ -257,8 +257,8 @@ class GetElementPtrInst : public Instruction {
     GetElementPtrInst(Value *ptr, std::vector<Value *> idxs, BasicBlock *bb);
 
   public:
-    static Type *get_element_type(Value *ptr, std::vector<Value *> idxs);
-    static GetElementPtrInst *create_gep(Value *ptr, std::vector<Value *> idxs,
+    static Type *get_element_type(Value *ptr, std::vector<Value *> &idxs);
+    static GetElementPtrInst *create_gep(Value *ptr, std::vector<Value *> &idxs,
                                          BasicBlock *bb);
     [[nodiscard]] Type *get_element_type() const;
 

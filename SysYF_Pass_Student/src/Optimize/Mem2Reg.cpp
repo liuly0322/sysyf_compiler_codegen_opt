@@ -125,10 +125,9 @@ void Mem2Reg::valueForwarding(BasicBlock *bb) {
         delete_list.insert(inst);
     }
 
-    // 给 bb 的后继基本块确定 φ 来源
+    // 给 bb 的后继基本块的 φ 指令确定来源
     for (auto *succbb : bb->get_succ_basic_blocks()) {
         for (auto *inst : succbb->get_instructions()) {
-            // 如果有 φ 指令
             if (!inst->is_phi())
                 break;
             auto *phi = dynamic_cast<PhiInst *>(inst);
@@ -144,21 +143,15 @@ void Mem2Reg::valueForwarding(BasicBlock *bb) {
     }
 
     // 递归访问后续 bb
-    for (auto *succbb : bb->get_succ_basic_blocks()) {
-        if (visited.find(succbb) != visited.end())
-            continue;
-        valueForwarding(succbb);
-    }
+    for (auto *succbb : bb->get_succ_basic_blocks())
+        if (visited.count(succbb) == 0)
+            valueForwarding(succbb);
 
     // 删除定值
     auto var_set = collectValueDefine(bb);
-    for (auto *var : var_set) {
-        if (value_status.find(var) == value_status.end())
-            continue;
-        if (value_status[var].empty())
-            continue;
-        value_status[var].pop_back();
-    }
+    for (auto *var : var_set)
+        if (!value_status[var].empty())
+            value_status[var].pop_back();
 
     for (auto *inst : delete_list)
         bb->delete_instr(inst);

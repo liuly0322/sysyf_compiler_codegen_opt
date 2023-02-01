@@ -56,9 +56,8 @@ Type *baseTypetoLLVMTy(SyntaxTree::Type type) {
 
 Type *SyntaxTreeTytoLLVMTy(SyntaxTree::Type type, bool isPtr = false) {
     Type *base_type = baseTypetoLLVMTy(type);
-    if (base_type == nullptr || !isPtr) {
+    if (base_type == nullptr || !isPtr)
         return base_type;
-    }
     return Type::get_pointer_type(base_type);
 }
 
@@ -83,13 +82,11 @@ Value *IRBuilder::typeConvertConstant(Constant *expr, Type *expected) {
 Value *IRBuilder::typeConvert(Value *expr, Type *expected) {
     auto *type = expr->get_type();
 
-    if (type == expected) {
+    if (type == expected)
         return expr;
-    }
 
-    if (auto *constant = dynamic_cast<Constant *>(expr)) {
+    if (auto *constant = dynamic_cast<Constant *>(expr))
         return typeConvertConstant(constant, expected);
-    }
 
     // pointer deref
     if (type->is_pointer_type()) {
@@ -116,132 +113,111 @@ Value *IRBuilder::typeConvert(Value *expr, Type *expected) {
 }
 
 template <typename T>
-void IRBuilder::binOpGenConstantT(T lhs, T rhs, BinOp op) {
+Value *IRBuilder::binOpGenConstantT(T lhs, T rhs, BinOp op) {
     if (op.isCondOp()) {
         switch (op.bin_cond_op) {
         case SyntaxTree::BinaryCondOp::LT:
-            prev_expr = CONST_INT(lhs < rhs);
-            break;
+            return CONST_INT(lhs < rhs);
         case SyntaxTree::BinaryCondOp::LTE:
-            prev_expr = CONST_INT(lhs <= rhs);
-            break;
+            return CONST_INT(lhs <= rhs);
         case SyntaxTree::BinaryCondOp::GT:
-            prev_expr = CONST_INT(lhs > rhs);
-            break;
+            return CONST_INT(lhs > rhs);
         case SyntaxTree::BinaryCondOp::GTE:
-            prev_expr = CONST_INT(lhs >= rhs);
-            break;
+            return CONST_INT(lhs >= rhs);
         case SyntaxTree::BinaryCondOp::EQ:
-            prev_expr = CONST_INT(lhs == rhs);
-            break;
+            return CONST_INT(lhs == rhs);
         case SyntaxTree::BinaryCondOp::NEQ:
-            prev_expr = CONST_INT(lhs != rhs);
-            break;
+            return CONST_INT(lhs != rhs);
         default:
             break;
         }
-        return;
+        return nullptr;
     }
     switch (op.bin_op) {
     case SyntaxTree::BinOp::PLUS:
-        prev_expr = CONST(lhs + rhs);
-        break;
+        return CONST(lhs + rhs);
     case SyntaxTree::BinOp::MINUS:
-        prev_expr = CONST(lhs - rhs);
-        break;
+        return CONST(lhs - rhs);
     case SyntaxTree::BinOp::MULTIPLY:
-        prev_expr = CONST(lhs * rhs);
-        break;
+        return CONST(lhs * rhs);
     case SyntaxTree::BinOp::DIVIDE:
-        prev_expr = CONST(lhs / rhs);
-        break;
+        return CONST(lhs / rhs);
     case SyntaxTree::BinOp::MODULO:
-        prev_expr = CONST(static_cast<int>(lhs) % static_cast<int>(rhs));
-    default:
-        break;
+        return CONST(static_cast<int>(lhs) % static_cast<int>(rhs));
     }
+    return nullptr;
 }
 
-void IRBuilder::binOpGenConstant(Constant *lhs, Constant *rhs, BinOp op) {
+Value *IRBuilder::binOpGenConstant(Constant *lhs, Constant *rhs, BinOp op) {
     if ((dynamic_cast<ConstantFloat *>(lhs) != nullptr) ||
         (dynamic_cast<ConstantFloat *>(rhs) != nullptr)) {
         auto lhs_value = static_cast<ConstantFloat *>(typeConvert(lhs, FLOAT_T))
                              ->get_value();
         auto rhs_value = static_cast<ConstantFloat *>(typeConvert(rhs, FLOAT_T))
                              ->get_value();
-        binOpGenConstantT(lhs_value, rhs_value, op);
-    } else {
-        auto lhs_value = dynamic_cast<ConstantInt *>(lhs)->get_value();
-        auto rhs_value = dynamic_cast<ConstantInt *>(rhs)->get_value();
-        binOpGenConstantT(lhs_value, rhs_value, op);
+        return binOpGenConstantT(lhs_value, rhs_value, op);
     }
+    auto lhs_value = dynamic_cast<ConstantInt *>(lhs)->get_value();
+    auto rhs_value = dynamic_cast<ConstantInt *>(rhs)->get_value();
+    return binOpGenConstantT(lhs_value, rhs_value, op);
 }
 
-void IRBuilder::binOpGenCreateInst(Value *lhs, Value *rhs, BinOp op) {
+Value *IRBuilder::binOpGenCreateInst(Value *lhs, Value *rhs, BinOp op) {
     const bool is_int = lhs->get_type()->is_integer_type();
-    if (op.isCondOp()) {
-        switch (op.bin_cond_op) {
-        case SyntaxTree::BinaryCondOp::LT:
-            if (is_int)
-                prev_expr = builder->create_icmp_lt(lhs, rhs);
-            else
-                prev_expr = builder->create_fcmp_lt(lhs, rhs);
-            break;
-        case SyntaxTree::BinaryCondOp::LTE:
-            if (is_int)
-                prev_expr = builder->create_icmp_le(lhs, rhs);
-            else
-                prev_expr = builder->create_fcmp_le(lhs, rhs);
-            break;
-        case SyntaxTree::BinaryCondOp::GT:
-            if (is_int)
-                prev_expr = builder->create_icmp_gt(lhs, rhs);
-            else
-                prev_expr = builder->create_fcmp_gt(lhs, rhs);
-            break;
-        case SyntaxTree::BinaryCondOp::GTE:
-            if (is_int)
-                prev_expr = builder->create_icmp_ge(lhs, rhs);
-            else
-                prev_expr = builder->create_fcmp_ge(lhs, rhs);
-            break;
-        case SyntaxTree::BinaryCondOp::EQ:
-            if (is_int)
-                prev_expr = builder->create_icmp_eq(lhs, rhs);
-            else
-                prev_expr = builder->create_fcmp_eq(lhs, rhs);
-            break;
-        case SyntaxTree::BinaryCondOp::NEQ:
-            if (is_int)
-                prev_expr = builder->create_icmp_ne(lhs, rhs);
-            else
-                prev_expr = builder->create_fcmp_ne(lhs, rhs);
-            break;
-        default:
-            break;
-        }
-        return;
-    }
     switch (op.bin_op) {
     case SyntaxTree::BinOp::PLUS:
-        prev_expr = is_int ? builder->create_iadd(lhs, rhs)
-                           : builder->create_fadd(lhs, rhs);
-        break;
+        return is_int ? builder->create_iadd(lhs, rhs)
+                      : builder->create_fadd(lhs, rhs);
     case SyntaxTree::BinOp::MINUS:
-        prev_expr = is_int ? builder->create_isub(lhs, rhs)
-                           : builder->create_fsub(lhs, rhs);
-        break;
+        return is_int ? builder->create_isub(lhs, rhs)
+                      : builder->create_fsub(lhs, rhs);
     case SyntaxTree::BinOp::MULTIPLY:
-        prev_expr = is_int ? builder->create_imul(lhs, rhs)
-                           : builder->create_fmul(lhs, rhs);
-        break;
+        return is_int ? builder->create_imul(lhs, rhs)
+                      : builder->create_fmul(lhs, rhs);
     case SyntaxTree::BinOp::DIVIDE:
-        prev_expr = is_int ? builder->create_isdiv(lhs, rhs)
-                           : builder->create_fdiv(lhs, rhs);
-        break;
+        return is_int ? builder->create_isdiv(lhs, rhs)
+                      : builder->create_fdiv(lhs, rhs);
     case SyntaxTree::BinOp::MODULO:
-        prev_expr = builder->create_isrem(lhs, rhs);
-        break;
+        return builder->create_isrem(lhs, rhs);
+    }
+    return nullptr;
+}
+
+Value *IRBuilder::binOpGenCreateCondInst(Value *lhs, Value *rhs, BinOp op) {
+    const bool is_int = lhs->get_type()->is_integer_type();
+    switch (op.bin_cond_op) {
+    case SyntaxTree::BinaryCondOp::LT:
+        if (is_int)
+            return builder->create_icmp_lt(lhs, rhs);
+        else
+            return builder->create_fcmp_lt(lhs, rhs);
+    case SyntaxTree::BinaryCondOp::LTE:
+        if (is_int)
+            return builder->create_icmp_le(lhs, rhs);
+        else
+            return builder->create_fcmp_le(lhs, rhs);
+    case SyntaxTree::BinaryCondOp::GT:
+        if (is_int)
+            return builder->create_icmp_gt(lhs, rhs);
+        else
+            return builder->create_fcmp_gt(lhs, rhs);
+    case SyntaxTree::BinaryCondOp::GTE:
+        if (is_int)
+            return builder->create_icmp_ge(lhs, rhs);
+        else
+            return builder->create_fcmp_ge(lhs, rhs);
+    case SyntaxTree::BinaryCondOp::EQ:
+        if (is_int)
+            return builder->create_icmp_eq(lhs, rhs);
+        else
+            return builder->create_fcmp_eq(lhs, rhs);
+    case SyntaxTree::BinaryCondOp::NEQ:
+        if (is_int)
+            return builder->create_icmp_ne(lhs, rhs);
+        else
+            return builder->create_fcmp_ne(lhs, rhs);
+    default:
+        return nullptr;
     }
 }
 
@@ -250,17 +226,15 @@ void IRBuilder::binOpGen(Value *lhs, Value *rhs, BinOp op) {
     auto *lhs_constant = dynamic_cast<Constant *>(lhs);
     auto *rhs_constant = dynamic_cast<Constant *>(rhs);
     if ((lhs_constant != nullptr) && (rhs_constant != nullptr)) {
-        binOpGenConstant(lhs_constant, rhs_constant, op);
+        prev_expr = binOpGenConstant(lhs_constant, rhs_constant, op);
         return;
     }
 
     // For pointers
-    if (lhs->get_type()->is_pointer_type()) {
+    if (lhs->get_type()->is_pointer_type())
         lhs = builder->create_load(lhs);
-    }
-    if (rhs->get_type()->is_pointer_type()) {
+    if (rhs->get_type()->is_pointer_type())
         rhs = builder->create_load(rhs);
-    }
 
     // Type convert
     if (lhs->get_type()->is_float_type() || rhs->get_type()->is_float_type()) {
@@ -271,7 +245,10 @@ void IRBuilder::binOpGen(Value *lhs, Value *rhs, BinOp op) {
         rhs = typeConvert(rhs, INT32_T);
     }
 
-    binOpGenCreateInst(lhs, rhs, op);
+    if (op.isCondOp())
+        prev_expr = binOpGenCreateCondInst(lhs, rhs, op);
+    else
+        prev_expr = binOpGenCreateInst(lhs, rhs, op);
 }
 
 void IRBuilder::visit(SyntaxTree::Assembly &node) {

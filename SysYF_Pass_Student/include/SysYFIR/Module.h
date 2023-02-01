@@ -31,7 +31,7 @@ class Module {
         return instr_id2string_[instr];
     }
     void set_print_name();
-    void set_file_name(std::string name) { source_file_name_ = name; }
+    void set_file_name(std::string &name) { source_file_name_ = name; }
     std::string get_file_name() { return source_file_name_; }
     std::string print();
 
@@ -47,7 +47,6 @@ class Module {
     std::string source_file_name_; // Original source file name for module, for
                                    // test and debug
 
-  private:
     IntegerType *int1_ty_;
     IntegerType *int32_ty_;
     FloatType *float32_ty_;

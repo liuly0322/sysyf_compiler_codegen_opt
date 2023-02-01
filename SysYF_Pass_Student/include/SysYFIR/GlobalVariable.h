@@ -17,7 +17,7 @@ class GlobalVariable : public User {
                                   bool is_const, Constant *init);
 
     Constant *get_init() { return init_val_; }
-    bool is_const() { return is_const_; }
-    std::string print();
+    [[nodiscard]] bool is_const() const { return is_const_; }
+    std::string print() override;
 };
 #endif //_SYSYF_GLOBALVARIABLE_H_
