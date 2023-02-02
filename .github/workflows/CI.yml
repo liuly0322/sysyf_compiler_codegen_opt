@@ -58,3 +58,4 @@ jobs:
           BRANCH: static
           FOLDER: static
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SQUASH_HISTORY: true
