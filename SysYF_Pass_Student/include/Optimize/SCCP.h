@@ -60,9 +60,6 @@ struct ValueStatus {
 };
 
 class ValueMap {
-  private:
-    std::map<Value *, ValueStatus> value_map;
-
   public:
     void clear() { value_map.clear(); }
     ValueStatus get(Value *key) {
@@ -71,6 +68,9 @@ class ValueMap {
         return value_map[key];
     }
     void set(Value *key, ValueStatus value) { value_map[key] = value; }
+
+  private:
+    std::map<Value *, ValueStatus> value_map;
 };
 
 class SCCP : public Pass {
@@ -79,9 +79,9 @@ class SCCP : public Pass {
         instruction_visitor = std::make_unique<InstructionVisitor>(*this);
     }
     void execute() final;
-    void sccp(Function *f);
-    [[nodiscard]] std::string get_name() const override { return name; }
+    Constant *constFold(Instruction *inst);
 
+    [[nodiscard]] std::string get_name() const override { return name; }
     std::set<std::pair<BasicBlock *, BasicBlock *>> &get_marked() {
         return marked;
     }
@@ -91,25 +91,22 @@ class SCCP : public Pass {
     }
     std::vector<Instruction *> &get_ssa_worklist() { return ssa_worklist; }
 
-    Constant *constFold(Instruction *inst);
-
   private:
-    const std::string name = "SCCP";
-
+    void sccp(Function *f);
+    ValueStatus getMapped(Value *key) { return value_map.get(key); }
     Constant *constFold(CmpInst *inst, Constant *v1, Constant *v2);
     Constant *constFold(FCmpInst *inst, Constant *v1, Constant *v2);
     Constant *constFold(Instruction *inst, Constant *v1, Constant *v2);
     Constant *constFold(Instruction *inst, Constant *v);
-
-    ValueMap value_map;
-    ValueStatus getMapped(Value *key) { return value_map.get(key); }
-
     void replaceConstant(Function *f);
+    static void condBrToJmp(Instruction *inst, BasicBlock *jmp_bb,
+                            BasicBlock *invalid_bb);
 
+    const std::string name = "SCCP";
+    ValueMap value_map;
     std::set<std::pair<BasicBlock *, BasicBlock *>> marked;
     std::vector<std::pair<BasicBlock *, BasicBlock *>> cfg_worklist;
     std::vector<Instruction *> ssa_worklist;
-
     std::unique_ptr<InstructionVisitor> instruction_visitor;
 };
 
@@ -122,8 +119,11 @@ class InstructionVisitor {
     void visit(Instruction *inst);
 
   private:
-    SCCP &sccp;
+    void visit_phi(PhiInst *inst);
+    void visit_br(BranchInst *inst);
+    void visit_foldable(Instruction *inst);
 
+    SCCP &sccp;
     ValueMap &value_map;
     std::vector<std::pair<BasicBlock *, BasicBlock *>> &cfg_worklist;
     std::vector<Instruction *> &ssa_worklist;
@@ -132,10 +132,6 @@ class InstructionVisitor {
     BasicBlock *bb;
     ValueStatus prev_status;
     ValueStatus cur_status;
-
-    void visit_phi(PhiInst *inst);
-    void visit_br(BranchInst *inst);
-    void visit_foldable(Instruction *inst);
 };
 
 #endif // SYSYF_SCCP_H

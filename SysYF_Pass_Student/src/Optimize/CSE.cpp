@@ -39,20 +39,6 @@ void CSE::deleteForward() {
     }
 }
 
-void CSE::execute() {
-    markPure(module);
-    forwardStore();
-    for (auto *fun : module->get_functions()) {
-        if (fun->is_declaration())
-            continue;
-        do {
-            localCSE(fun);
-            globalCSE(fun);
-        } while (!delete_list.empty());
-    }
-    deleteForward();
-}
-
 Value *CSE::findOrigin(Value *val) {
     Value *lval_runner = val;
     while (auto *gep_inst = dynamic_cast<GetElementPtrInst *>(lval_runner))
@@ -61,30 +47,14 @@ Value *CSE::findOrigin(Value *val) {
     return lval_runner;
 }
 
-/**
- * @brief 如果 load 和 store 指令的下标是不相同的常数，返回 true
- *
- * @param inst1 load 指令
- * @param inst2 store 指令
- * @return true 下标可以确定不同
- * @return false 下标不确定是否可能相同
- */
-bool isStoreWithDifferentIndex(Instruction *inst1, Instruction *inst2) {
-    if (!inst2->is_store())
-        return false;
-    auto *lval1 = static_cast<LoadInst *>(inst1)->get_lval();
-    auto *lval2 = static_cast<StoreInst *>(inst2)->get_lval();
-    auto *gep1 = dynamic_cast<GetElementPtrInst *>(lval1);
-    auto *gep2 = dynamic_cast<GetElementPtrInst *>(lval2);
-    if (gep1 == nullptr || gep2 == nullptr)
-        return false;
-    auto *index1 = gep1->get_operands().back();
-    auto *index2 = gep2->get_operands().back();
-    auto *const_index1 = dynamic_cast<ConstantInt *>(index1);
-    auto *const_index2 = dynamic_cast<ConstantInt *>(index2);
-    if (const_index1 == nullptr || const_index2 == nullptr)
-        return false;
-    return const_index1->get_value() != const_index2->get_value();
+bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts,
+                 unsigned index) {
+    for (auto i = index + 1; i < insts.size(); ++i) {
+        auto *instr = insts[i];
+        if (isKill(inst, instr))
+            return true;
+    }
+    return false;
 }
 
 bool CSE::isKill(Instruction *inst1, Instruction *inst2) {
@@ -134,6 +104,24 @@ bool CSE::isKill(Instruction *inst1, Instruction *inst2) {
     return false;
 }
 
+bool CSE::isStoreWithDifferentIndex(Instruction *inst1, Instruction *inst2) {
+    if (!inst2->is_store())
+        return false;
+    auto *lval1 = static_cast<LoadInst *>(inst1)->get_lval();
+    auto *lval2 = static_cast<StoreInst *>(inst2)->get_lval();
+    auto *gep1 = dynamic_cast<GetElementPtrInst *>(lval1);
+    auto *gep2 = dynamic_cast<GetElementPtrInst *>(lval2);
+    if (gep1 == nullptr || gep2 == nullptr)
+        return false;
+    auto *index1 = gep1->get_operands().back();
+    auto *index2 = gep2->get_operands().back();
+    auto *const_index1 = dynamic_cast<ConstantInt *>(index1);
+    auto *const_index2 = dynamic_cast<ConstantInt *>(index2);
+    if (const_index1 == nullptr || const_index2 == nullptr)
+        return false;
+    return const_index1->get_value() != const_index2->get_value();
+}
+
 Instruction *CSE::isAppear(Instruction *inst, std::vector<Instruction *> &insts,
                            int index) {
     for (auto i = index - 1; i >= 0; --i) {
@@ -144,6 +132,20 @@ Instruction *CSE::isAppear(Instruction *inst, std::vector<Instruction *> &insts,
             return instr;
     }
     return nullptr;
+}
+
+void CSE::execute() {
+    markPure(module);
+    forwardStore();
+    for (auto *fun : module->get_functions()) {
+        if (fun->is_declaration())
+            continue;
+        do {
+            localCSE(fun);
+            globalCSE(fun);
+        } while (!delete_list.empty());
+    }
+    deleteForward();
 }
 
 void CSE::localCSE(Function *fun) {
@@ -177,14 +179,10 @@ void CSE::globalCSE(Function *fun) {
     replaceSubExpr(fun);
 }
 
-bool CSE::isKill(Instruction *inst, std::vector<Instruction *> &insts,
-                 unsigned index) {
-    for (auto i = index + 1; i < insts.size(); ++i) {
-        auto *instr = insts[i];
-        if (isKill(inst, instr))
-            return true;
-    }
-    return false;
+void CSE::calcGenKill(Function *fun) {
+    calcAvailable(fun);
+    calcGen(fun);
+    calcKill(fun);
 }
 
 void CSE::calcAvailable(Function *fun) {
@@ -247,12 +245,6 @@ void CSE::calcKill(Function *fun) {
     }
 }
 
-void CSE::calcGenKill(Function *fun) {
-    calcAvailable(fun);
-    calcGen(fun);
-    calcKill(fun);
-}
-
 void CSE::calcInOut(Function *fun) {
     // initialize
     const std::vector<bool> phi(available.size(), false);
@@ -306,14 +298,28 @@ void CSE::findSource(Function *fun) {
     }
 }
 
-/**
- * @brief 已知 bb 入口可用表达式
- *        如果源头唯一，则返回源头，否则返回空指针
- * @param bb 当前基本块
- * @param source 可用表达式源头
- * @return Instruction* 源头
- */
-Instruction *findReplacement(BasicBlock *bb, std::set<Instruction *> &source) {
+void CSE::replaceSubExpr(Function *fun) {
+    for (auto *bb : fun->get_basic_blocks()) {
+        for (auto *inst : bb->get_instructions()) {
+            if (!isOptimizable(inst))
+                continue;
+            auto it =
+                std::find(available.begin(), available.end(), Expression(inst));
+            auto index = it - available.begin();
+            auto &source = it->source;
+            if (!IN[bb][index] || KILL[bb][index] || source.count(inst) != 0)
+                continue;
+            if (auto *rep_inst = findReplacement(bb, source)) {
+                delete_list.push_back(inst);
+                inst->replace_all_use_with(rep_inst);
+            }
+        }
+    }
+    deleteInstr();
+}
+
+Instruction *CSE::findReplacement(BasicBlock *bb,
+                                  std::set<Instruction *> &source) {
     auto source_map = std::map<BasicBlock *, Instruction *>{};
     for (auto *inst : source) {
         auto *source_bb = inst->get_parent();
@@ -341,26 +347,6 @@ Instruction *findReplacement(BasicBlock *bb, std::set<Instruction *> &source) {
         }
     }
     return arrived.size() == 1 ? source_map[*arrived.begin()] : nullptr;
-}
-
-void CSE::replaceSubExpr(Function *fun) {
-    for (auto *bb : fun->get_basic_blocks()) {
-        for (auto *inst : bb->get_instructions()) {
-            if (!isOptimizable(inst))
-                continue;
-            auto it =
-                std::find(available.begin(), available.end(), Expression(inst));
-            auto index = it - available.begin();
-            auto &source = it->source;
-            if (!IN[bb][index] || KILL[bb][index] || source.count(inst) != 0)
-                continue;
-            if (auto *rep_inst = findReplacement(bb, source)) {
-                delete_list.push_back(inst);
-                inst->replace_all_use_with(rep_inst);
-            }
-        }
-    }
-    deleteInstr();
 }
 
 void CSE::deleteInstr() {

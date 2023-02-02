@@ -7,8 +7,7 @@
 #include <set>
 #include <vector>
 
-class Expression {
-  public:
+struct Expression {
     std::set<Instruction *> source;
     Instruction::OpID type;
     Instruction *inst;
@@ -71,41 +70,36 @@ class Expression {
 };
 
 class CSE : public Pass {
-  private:
-    std::map<BasicBlock *, std::vector<bool>> GEN;
-    std::map<BasicBlock *, std::vector<bool>> KILL;
-    std::map<BasicBlock *, std::vector<bool>> IN;
-    std::map<BasicBlock *, std::vector<bool>> OUT;
-    std::vector<Expression> available;
-    std::vector<Instruction *> delete_list;
-    std::vector<std::pair<Instruction *, Value *>> forwarded_load;
-    const std::string name = "CSE";
+  public:
+    explicit CSE(Module *m) : Pass(m){};
+    void execute() final;
+    [[nodiscard]] std::string get_name() const override { return name; }
 
+  private:
     static Value *findOrigin(Value *val);
     static Instruction *isAppear(Instruction *inst,
                                  std::vector<Instruction *> &insts, int index);
     static bool isKill(Instruction *inst1, Instruction *inst2);
     static bool isKill(Instruction *inst, std::vector<Instruction *> &insts,
                        unsigned index);
+    static bool isStoreWithDifferentIndex(Instruction *inst1,
+                                          Instruction *inst2);
 
     void forwardStore();
     void deleteForward();
 
     void localCSE(Function *fun);
     void globalCSE(Function *fun);
-
     void calcGenKill(Function *fun);
     void calcAvailable(Function *fun);
     void calcGen(Function *fun);
     void calcKill(Function *fun);
-
     void calcInOut(Function *fun);
-
     void findSource(Function *fun);
     void replaceSubExpr(Function *fun);
-
+    static Instruction *findReplacement(BasicBlock *bb,
+                                        std::set<Instruction *> &source);
     void deleteInstr();
-
     static bool isOptimizable(Instruction *inst) {
         if (inst->is_void() || inst->is_alloca())
             return false;
@@ -116,10 +110,14 @@ class CSE : public Pass {
         return true;
     }
 
-  public:
-    explicit CSE(Module *m) : Pass(m){};
-    void execute() final;
-    [[nodiscard]] std::string get_name() const override { return name; }
+    const std::string name = "CSE";
+    std::map<BasicBlock *, std::vector<bool>> GEN;
+    std::map<BasicBlock *, std::vector<bool>> KILL;
+    std::map<BasicBlock *, std::vector<bool>> IN;
+    std::map<BasicBlock *, std::vector<bool>> OUT;
+    std::vector<Expression> available;
+    std::vector<Instruction *> delete_list;
+    std::vector<std::pair<Instruction *, Value *>> forwarded_load;
 };
 
 #endif // SYSYF_CSE_H

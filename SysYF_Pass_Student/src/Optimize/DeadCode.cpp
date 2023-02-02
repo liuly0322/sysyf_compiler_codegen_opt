@@ -6,51 +6,6 @@ using PureFunction::is_pure;
 using PureFunction::markPure;
 using PureFunction::store_to_alloca;
 
-bool is_critical_inst(Instruction *inst) {
-    if (inst->is_ret() ||
-        (inst->is_store() && store_to_alloca(inst) == nullptr)) {
-        return true;
-    }
-    if (inst->is_br() &&
-        inst->get_parent() == inst->get_function()->get_entry_block())
-        return true;
-    if (inst->is_call()) {
-        auto *call_inst = dynamic_cast<CallInst *>(inst);
-        auto *callee = dynamic_cast<Function *>(call_inst->get_operand(0));
-        return !is_pure[callee];
-    }
-    return false;
-}
-
-void delete_basic_block(BasicBlock *i, BasicBlock *j) {
-    auto &use_list = i->get_use_list();
-    while (!use_list.empty()) {
-        auto &use = use_list.front();
-        use_list.pop_front();
-
-        // 跳转指令
-        auto *inst = static_cast<Instruction *>(use.val_);
-        if (inst->is_br()) {
-            inst->set_operand(use.arg_no_, j);
-            continue;
-        }
-
-        // phi 指令
-        auto *op = inst->get_operand(use.arg_no_ - 1);
-        inst->remove_operands(use.arg_no_ - 1, use.arg_no_);
-        for (auto *pre : i->get_pre_basic_blocks()) {
-            dynamic_cast<PhiInst *>(inst)->add_phi_pair_operand(op, pre);
-        }
-    }
-
-    for (auto *pre : i->get_pre_basic_blocks()) {
-        pre->add_succ_basic_block(j);
-        j->add_pre_basic_block(pre);
-    }
-
-    i->erase_from_parent();
-}
-
 void DeadCode::execute() {
     markPure(module);
     for (auto *f : module->get_functions()) {
@@ -134,21 +89,37 @@ void Marker::mark(Function *f) {
     }
 }
 
-void Marker::markInst(Instruction *inst) {
-    if (marked.count(inst) == 0) {
-        marked.insert(inst);
-        worklist.push_back(inst);
-    }
-}
-
 void Marker::markBaseCase(Function *f) {
     for (auto *bb : f->get_basic_blocks()) {
         for (auto *inst : bb->get_instructions()) {
-            if (is_critical_inst(inst))
+            if (isCriticalInst(inst))
                 markInst(inst);
             else if (inst->is_store())
                 lval_store[store_to_alloca(inst)].insert(inst);
         }
+    }
+}
+
+bool Marker::isCriticalInst(Instruction *inst) {
+    if (inst->is_ret() ||
+        (inst->is_store() && store_to_alloca(inst) == nullptr)) {
+        return true;
+    }
+    if (inst->is_br() &&
+        inst->get_parent() == inst->get_function()->get_entry_block())
+        return true;
+    if (inst->is_call()) {
+        auto *call_inst = dynamic_cast<CallInst *>(inst);
+        auto *callee = dynamic_cast<Function *>(call_inst->get_operand(0));
+        return !is_pure[callee];
+    }
+    return false;
+}
+
+void Marker::markInst(Instruction *inst) {
+    if (marked.count(inst) == 0) {
+        marked.insert(inst);
+        worklist.push_back(inst);
     }
 }
 
@@ -217,10 +188,8 @@ void Cleaner::visitBasicBlock(BasicBlock *i) {
     auto *j = i->get_succ_basic_blocks().front();
     if (blockMergeable(i, j)) {
         mergeBlocks(i, j);
-    } else if (auto *j_br =
-                   dynamic_cast<BranchInst *>(j->get_instructions().front())) {
-        if (j_br->is_cond_br())
-            hoistBranches(i, j);
+    } else if (BranchHoistable(j)) {
+        hoistBranch(i, j);
     }
 }
 
@@ -277,10 +246,44 @@ void Cleaner::mergeBlocks(BasicBlock *i, BasicBlock *j) {
         j->add_instr_begin(*it);
         (*it)->set_parent(j);
     }
-    delete_basic_block(i, j);
+    replaceBlockWith(i, j);
 }
 
-void Cleaner::hoistBranches(BasicBlock *i, BasicBlock *j) {
+void Cleaner::replaceBlockWith(BasicBlock *i, BasicBlock *j) {
+    auto &use_list = i->get_use_list();
+    while (!use_list.empty()) {
+        auto &use = use_list.front();
+        use_list.pop_front();
+
+        // 跳转指令
+        auto *inst = static_cast<Instruction *>(use.val_);
+        if (inst->is_br()) {
+            inst->set_operand(use.arg_no_, j);
+            continue;
+        }
+
+        // phi 指令
+        auto *op = inst->get_operand(use.arg_no_ - 1);
+        inst->remove_operands(use.arg_no_ - 1, use.arg_no_);
+        for (auto *pre : i->get_pre_basic_blocks()) {
+            dynamic_cast<PhiInst *>(inst)->add_phi_pair_operand(op, pre);
+        }
+    }
+
+    for (auto *pre : i->get_pre_basic_blocks()) {
+        pre->add_succ_basic_block(j);
+        j->add_pre_basic_block(pre);
+    }
+
+    i->erase_from_parent();
+}
+
+bool Cleaner::BranchHoistable(BasicBlock *j) {
+    auto *j_br = dynamic_cast<BranchInst *>(j->get_instructions().front());
+    return j_br != nullptr && j_br->is_cond_br();
+}
+
+void Cleaner::hoistBranch(BasicBlock *i, BasicBlock *j) {
     cleaned = true, ever_cleaned = true;
 
     auto *i_jmp = i->get_terminator();

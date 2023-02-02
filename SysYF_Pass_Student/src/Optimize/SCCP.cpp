@@ -99,17 +99,6 @@ Constant *SCCP::constFold(Instruction *inst) {
     return nullptr;
 }
 
-static void cond_br_to_jmp(Instruction *inst, BasicBlock *jmp_bb,
-                           BasicBlock *invalid_bb) {
-    auto *bb = inst->get_parent();
-    inst->remove_operands(0, 2);
-    inst->add_operand(jmp_bb);
-    if (jmp_bb == invalid_bb)
-        return;
-    bb->remove_succ_basic_block(invalid_bb);
-    invalid_bb->remove_pre_basic_block(bb);
-}
-
 void SCCP::execute() {
     for (auto *f : module->get_functions())
         sccp(f);
@@ -183,10 +172,21 @@ void SCCP::replaceConstant(Function *f) {
         auto *true_bb = static_cast<BasicBlock *>(branch_inst->get_operand(1));
         auto *false_bb = static_cast<BasicBlock *>(branch_inst->get_operand(2));
         if (const_cond->get_value() != 0)
-            cond_br_to_jmp(branch_inst, true_bb, false_bb);
+            condBrToJmp(branch_inst, true_bb, false_bb);
         else
-            cond_br_to_jmp(branch_inst, false_bb, true_bb);
+            condBrToJmp(branch_inst, false_bb, true_bb);
     }
+}
+
+void SCCP::condBrToJmp(Instruction *inst, BasicBlock *jmp_bb,
+                       BasicBlock *invalid_bb) {
+    auto *bb = inst->get_parent();
+    inst->remove_operands(0, 2);
+    inst->add_operand(jmp_bb);
+    if (jmp_bb == invalid_bb)
+        return;
+    bb->remove_succ_basic_block(invalid_bb);
+    invalid_bb->remove_pre_basic_block(bb);
 }
 
 void InstructionVisitor::visit(Instruction *inst) {
