@@ -56,8 +56,8 @@ class Cleaner {
     void postTraverseBasicBlocks();
     void visitBasicBlock(BasicBlock *i);
     static bool eliminateRedundantBranches(Instruction *br_inst);
-    void eliminateEmptyBlock(BasicBlock *i, BasicBlock *j);
-    void combineBasicBlocks(BasicBlock *i, BasicBlock *j);
+    bool blockMergeable(BasicBlock *i, BasicBlock *j);
+    void mergeBlocks(BasicBlock *i, BasicBlock *j);
     static void connectHoisting(BasicBlock *i, BasicBlock *j, BasicBlock *dst);
     void hoistBranches(BasicBlock *i, BasicBlock *j);
     void cleanUnreachable();

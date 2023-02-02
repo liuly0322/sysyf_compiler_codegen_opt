@@ -27,26 +27,27 @@ void delete_basic_block(BasicBlock *i, BasicBlock *j) {
     while (!use_list.empty()) {
         auto &use = use_list.front();
         use_list.pop_front();
-        // 可能是 phi 指令或者跳转指令
-        // 跳转指令直接替换成 j 即可
+
+        // 跳转指令
         auto *inst = static_cast<Instruction *>(use.val_);
         if (inst->is_br()) {
             inst->set_operand(use.arg_no_, j);
             continue;
         }
-        // phi 指令需要统计 i 的所有前驱
+
+        // phi 指令
         auto *op = inst->get_operand(use.arg_no_ - 1);
         inst->remove_operands(use.arg_no_ - 1, use.arg_no_);
         for (auto *pre : i->get_pre_basic_blocks()) {
             dynamic_cast<PhiInst *>(inst)->add_phi_pair_operand(op, pre);
         }
     }
-    // 调整前驱后继关系
+
     for (auto *pre : i->get_pre_basic_blocks()) {
         pre->add_succ_basic_block(j);
         j->add_pre_basic_block(pre);
     }
-    // 删除基本块 i
+
     i->erase_from_parent();
 }
 
@@ -172,8 +173,8 @@ void Marker::markRDF(BasicBlock *bb) {
 bool Cleaner::clean(Function *f) {
     if (f->is_declaration())
         return false;
-
     f_ = f;
+
     ever_cleaned = false;
 
     do {
@@ -208,16 +209,14 @@ void Cleaner::visitBasicBlock(BasicBlock *i) {
     auto *terminator = i->get_terminator();
     if (!terminator->is_br())
         return;
-    auto *br_inst = static_cast<BranchInst *>(terminator);
 
+    auto *br_inst = static_cast<BranchInst *>(terminator);
     if (br_inst->is_cond_br() && !eliminateRedundantBranches(br_inst))
         return;
 
     auto *j = i->get_succ_basic_blocks().front();
-    if (i->get_num_of_instr() == 1) {
-        eliminateEmptyBlock(i, j);
-    } else if (j->get_pre_basic_blocks().size() == 1) {
-        combineBasicBlocks(i, j);
+    if (blockMergeable(i, j)) {
+        mergeBlocks(i, j);
     } else if (auto *j_br =
                    dynamic_cast<BranchInst *>(j->get_instructions().front())) {
         if (j_br->is_cond_br())
@@ -235,78 +234,50 @@ bool Cleaner::eliminateRedundantBranches(Instruction *br_inst) {
     return true;
 }
 
-void Cleaner::eliminateEmptyBlock(BasicBlock *i, BasicBlock *j) {
+bool Cleaner::blockMergeable(BasicBlock *i, BasicBlock *j) {
+    if (j->get_pre_basic_blocks().size() == 1)
+        return true;
+
+    if (i->get_num_of_instr() != 1)
+        return false;
     if (i == f_->get_entry_block())
-        return;
+        return false;
 
     // 要求 j 不能有同时含有 i 和 i 前驱作为操作数的 phi 指令
     const std::set<Value *> pres{i->get_pre_basic_blocks().begin(),
                                  i->get_pre_basic_blocks().end()};
-    bool has_both_pre_and_i = false;
 
-    for (auto *j_inst : j->get_instructions()) {
-        auto *phi_inst = dynamic_cast<PhiInst *>(j_inst);
-        if (phi_inst == nullptr)
+    for (auto *inst : j->get_instructions()) {
+        if (!inst->is_phi())
             break;
 
-        auto has_pre = false;
-        auto has_i = false;
-        for (auto *phi_operand : phi_inst->get_operands()) {
+        auto has_both = 0;
+        for (auto *phi_operand : inst->get_operands()) {
             if (pres.count(phi_operand) != 0)
-                has_pre = true;
+                has_both |= 1;
             if (phi_operand == i)
-                has_i = true;
+                has_both |= 2;
         }
 
-        if (has_pre && has_i) {
-            has_both_pre_and_i = true;
-            break;
-        }
+        if (has_both == 3)
+            return false;
     }
-    if (has_both_pre_and_i)
-        return;
-
-    cleaned = true, ever_cleaned = true;
-    delete_basic_block(i, j);
+    return true;
 }
 
-void Cleaner::combineBasicBlocks(BasicBlock *i, BasicBlock *j) {
+void Cleaner::mergeBlocks(BasicBlock *i, BasicBlock *j) {
+    cleaned = true, ever_cleaned = true;
     if (i == f_->get_entry_block()) {
         f_->get_basic_blocks().remove(j);
         f_->get_basic_blocks().front() = j;
     }
 
-    cleaned = true, ever_cleaned = true;
-
-    while (j->get_instructions().front()->is_phi()) {
-        auto *phi_inst = j->get_instructions().front();
-        phi_inst->replace_all_use_with(phi_inst->get_operand(0));
-        j->delete_instr(phi_inst);
-    }
     auto &i_insts = i->get_instructions();
     for (auto it = ++i_insts.rbegin(); it != i_insts.rend(); ++it) {
         j->add_instr_begin(*it);
         (*it)->set_parent(j);
     }
     delete_basic_block(i, j);
-}
-
-void Cleaner::connectHoisting(BasicBlock *i, BasicBlock *j, BasicBlock *dst) {
-    i->add_succ_basic_block(dst);
-    dst->add_pre_basic_block(i);
-
-    // 如果有 j 的 phi operand，给 i 也来一份
-    for (auto *inst : dst->get_instructions()) {
-        if (!inst->is_phi())
-            break;
-        for (auto index = 1U; index < inst->get_num_operand(); index += 2) {
-            if (inst->get_operand(index) == j) {
-                inst->add_operand(inst->get_operand(index - 1));
-                inst->add_operand(i);
-                break;
-            }
-        }
-    }
 }
 
 void Cleaner::hoistBranches(BasicBlock *i, BasicBlock *j) {
@@ -331,12 +302,29 @@ void Cleaner::hoistBranches(BasicBlock *i, BasicBlock *j) {
     connectHoisting(i, j, false_bb);
 }
 
+void Cleaner::connectHoisting(BasicBlock *i, BasicBlock *j, BasicBlock *dst) {
+    i->add_succ_basic_block(dst);
+    dst->add_pre_basic_block(i);
+
+    // 如果有 j 的 phi operand，给 i 也来一份
+    for (auto *inst : dst->get_instructions()) {
+        if (!inst->is_phi())
+            break;
+        for (auto index = 1U; index < inst->get_num_operand(); index += 2) {
+            if (inst->get_operand(index) == j) {
+                inst->add_operand(inst->get_operand(index - 1));
+                inst->add_operand(i);
+                break;
+            }
+        }
+    }
+}
+
 void Cleaner::cleanUnreachable() {
     auto delete_list = std::vector<BasicBlock *>{};
-    for (auto *bb : f_->get_basic_blocks()) {
+    for (auto *bb : f_->get_basic_blocks())
         if (visited.count(bb) == 0)
             delete_list.push_back(bb);
-    }
     for (auto *bb : delete_list)
         f_->remove(bb);
     ever_cleaned |= !delete_list.empty();
