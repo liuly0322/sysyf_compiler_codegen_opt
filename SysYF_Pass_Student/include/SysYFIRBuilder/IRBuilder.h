@@ -83,6 +83,17 @@ struct BinOp {
     [[nodiscard]] bool isCondOp() const { return flag == isBinCondOp; }
 };
 
+struct WhileStructType {
+    BasicBlock *condBB;
+    BasicBlock *innerBB;
+    BasicBlock *exitBB;
+};
+
+struct CondStructType {
+    BasicBlock *trueBB;
+    BasicBlock *falseBB;
+};
+
 class IRBuilder : public SyntaxTree::Visitor {
   private:
     ConstantInt *CONST(int num) { return CONST_INT(num); }
@@ -120,6 +131,12 @@ class IRBuilder : public SyntaxTree::Visitor {
     IRStmtBuilder *builder;
     Scope scope;
     std::unique_ptr<Module> module;
+
+    Value *prev_expr = nullptr;
+    WhileStructType curWhileStruct;
+    CondStructType curCondStruct;
+    BasicBlock *ret_BB;
+    Value *ret_addr;
 
   public:
     ~IRBuilder() { delete builder; }

@@ -11,28 +11,6 @@
 #include "IRBuilder.h"
 #include "SyntaxTree.h"
 
-// last visited expr
-Value *prev_expr = nullptr;
-
-// 函数栈内维护 While 嵌套结构
-struct WhileStructType {
-    BasicBlock *condBB;
-    BasicBlock *innerBB;
-    BasicBlock *exitBB;
-};
-auto curWhileStruct = WhileStructType{nullptr, nullptr, nullptr};
-
-// 函数栈内维护跳转信息
-struct CondStructType {
-    BasicBlock *trueBB;
-    BasicBlock *falseBB;
-};
-auto curCondStruct = CondStructType{nullptr, nullptr};
-
-// return val
-BasicBlock *ret_BB;
-Value *ret_addr;
-
 // types
 Type *VOID_T;
 Type *INT1_T;
@@ -265,7 +243,7 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
     scope.enter();
 
     // 分配函数参数的空间
-    auto *entryBlock = BasicBlock::create(module.get(), "entry", Fun);
+    auto *entryBlock = BasicBlock::create(module.get(), "", Fun);
     builder->set_insert_point(entryBlock);
     auto arg = Fun->arg_begin();
     auto arg_end = Fun->arg_end();
@@ -283,7 +261,7 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
     // 返回值和返回基本块
     if (ret_type != VOID_T)
         ret_addr = builder->create_alloca(ret_type);
-    ret_BB = BasicBlock::create(module.get(), "ret", Fun);
+    ret_BB = BasicBlock::create(module.get(), "", Fun);
     builder->set_insert_point(ret_BB);
     if (ret_type == VOID_T) {
         builder->create_void_ret();
