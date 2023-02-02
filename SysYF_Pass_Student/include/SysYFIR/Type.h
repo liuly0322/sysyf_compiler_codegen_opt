@@ -97,7 +97,7 @@ class IntegerType : public Type {
 
     static IntegerType *get(unsigned num_bits, Module *m);
 
-    unsigned get_num_bits();
+    [[nodiscard]] unsigned get_num_bits() const { return num_bits_; };
 
   private:
     unsigned num_bits_;

@@ -29,15 +29,33 @@ struct CondStructType {
 };
 auto curCondStruct = CondStructType{nullptr, nullptr};
 
+// return val
+BasicBlock *ret_BB;
+Value *ret_addr;
+
 // types
 Type *VOID_T;
 Type *INT1_T;
 Type *INT32_T;
 Type *FLOAT_T;
 
-// return val
-BasicBlock *ret_BB;
-Value *ret_addr;
+const std::map<SyntaxTree::BinaryCondOp, CmpInst::CmpOp> binCondOpToCmpOp = {
+    {SyntaxTree::BinaryCondOp::EQ, CmpInst::CmpOp::EQ},
+    {SyntaxTree::BinaryCondOp::NEQ, CmpInst::CmpOp::NE},
+    {SyntaxTree::BinaryCondOp::GT, CmpInst::CmpOp::GT},
+    {SyntaxTree::BinaryCondOp::GTE, CmpInst::CmpOp::GE},
+    {SyntaxTree::BinaryCondOp::LT, CmpInst::CmpOp::LT},
+    {SyntaxTree::BinaryCondOp::LTE, CmpInst::CmpOp::LE},
+};
+
+const std::map<SyntaxTree::BinaryCondOp, FCmpInst::CmpOp> binCondOpToFCmpOp = {
+    {SyntaxTree::BinaryCondOp::EQ, FCmpInst::CmpOp::EQ},
+    {SyntaxTree::BinaryCondOp::NEQ, FCmpInst::CmpOp::NE},
+    {SyntaxTree::BinaryCondOp::GT, FCmpInst::CmpOp::GT},
+    {SyntaxTree::BinaryCondOp::GTE, FCmpInst::CmpOp::GE},
+    {SyntaxTree::BinaryCondOp::LT, FCmpInst::CmpOp::LT},
+    {SyntaxTree::BinaryCondOp::LTE, FCmpInst::CmpOp::LE},
+};
 
 Type *baseTypetoLLVMTy(SyntaxTree::Type type) {
     switch (type) {
@@ -185,40 +203,12 @@ Value *IRBuilder::binOpGenCreateInst(Value *lhs, Value *rhs, BinOp op) {
 
 Value *IRBuilder::binOpGenCreateCondInst(Value *lhs, Value *rhs, BinOp op) {
     const bool is_int = lhs->get_type()->is_integer_type();
-    switch (op.bin_cond_op) {
-    case SyntaxTree::BinaryCondOp::LT:
-        if (is_int)
-            return builder->create_icmp_lt(lhs, rhs);
-        else
-            return builder->create_fcmp_lt(lhs, rhs);
-    case SyntaxTree::BinaryCondOp::LTE:
-        if (is_int)
-            return builder->create_icmp_le(lhs, rhs);
-        else
-            return builder->create_fcmp_le(lhs, rhs);
-    case SyntaxTree::BinaryCondOp::GT:
-        if (is_int)
-            return builder->create_icmp_gt(lhs, rhs);
-        else
-            return builder->create_fcmp_gt(lhs, rhs);
-    case SyntaxTree::BinaryCondOp::GTE:
-        if (is_int)
-            return builder->create_icmp_ge(lhs, rhs);
-        else
-            return builder->create_fcmp_ge(lhs, rhs);
-    case SyntaxTree::BinaryCondOp::EQ:
-        if (is_int)
-            return builder->create_icmp_eq(lhs, rhs);
-        else
-            return builder->create_fcmp_eq(lhs, rhs);
-    case SyntaxTree::BinaryCondOp::NEQ:
-        if (is_int)
-            return builder->create_icmp_ne(lhs, rhs);
-        else
-            return builder->create_fcmp_ne(lhs, rhs);
-    default:
-        return nullptr;
+    if (is_int) {
+        const auto cmp_op = binCondOpToCmpOp.at(op.bin_cond_op);
+        return builder->create_icmp(lhs, rhs, cmp_op);
     }
+    const auto fcmp_op = binCondOpToFCmpOp.at(op.bin_cond_op);
+    return builder->create_fcmp(lhs, rhs, fcmp_op);
 }
 
 void IRBuilder::binOpGen(Value *lhs, Value *rhs, BinOp op) {
@@ -268,7 +258,7 @@ void IRBuilder::visit(SyntaxTree::FuncDef &node) {
         params.push_back(SyntaxTreeTytoLLVMTy(param->param_type,
                                               !param->array_index.empty()));
     }
-    auto *FunTy = FunctionType::get(ret_type, params);
+    auto *FunTy = FunctionType::get(ret_type, std::move(params));
     auto *Fun = Function::create(FunTy, node.name, module.get());
     scope.push(node.name, Fun);
 

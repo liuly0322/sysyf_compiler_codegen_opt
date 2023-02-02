@@ -43,15 +43,13 @@ PointerType *Type::get_float_ptr_type(Module *m) {
 Type *Type::get_pointer_element_type() {
     if (this->is_pointer_type())
         return static_cast<PointerType *>(this)->get_element_type();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 Type *Type::get_array_element_type() {
     if (this->is_array_type())
         return static_cast<ArrayType *>(this)->get_element_type();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 int Type::get_size() {
@@ -72,9 +70,8 @@ int Type::get_size() {
     if (this->is_pointer_type()) {
         if (this->get_pointer_element_type()->is_array_type()) {
             return this->get_pointer_element_type()->get_size();
-        } else {
-            return 4;
         }
+        return 4;
     }
     return 0;
 }
@@ -102,7 +99,7 @@ std::string Type::print() {
         type_ir += " (";
         for (auto i = 0U;
              i < static_cast<FunctionType *>(this)->get_num_of_args(); i++) {
-            if (i)
+            if (i != 0)
                 type_ir += ", ";
             type_ir +=
                 static_cast<FunctionType *>(this)->get_param_type(i)->print();
@@ -134,27 +131,13 @@ IntegerType *IntegerType::get(unsigned num_bits, Module *m) {
     return new IntegerType(num_bits, m);
 }
 
-unsigned IntegerType::get_num_bits() { return num_bits_; }
-
 FloatType::FloatType(Module *m) : Type(Type::FloatTyID, m) {}
 
 FloatType *FloatType::get(Module *m) { return new FloatType(m); }
 
 FunctionType::FunctionType(Type *result, std::vector<Type *> params)
-    : Type(Type::FunctionTyID, nullptr) {
-#ifdef DEBUG
-    assert(is_valid_return_type(result) && "Invalid return type for function!");
-#endif
-    result_ = result;
-
-    for (auto p : params) {
-#ifdef DEBUG
-        assert(is_valid_argument_type(p) &&
-               "Not a valid type for function argument!");
-#endif
-        args_.push_back(p);
-    }
-}
+    : Type(Type::FunctionTyID, nullptr), result_(result),
+      args_(std::move(params)) {}
 
 bool FunctionType::is_valid_return_type(Type *ty) {
     return ty->is_integer_type() || ty->is_void_type();
@@ -165,7 +148,7 @@ bool FunctionType::is_valid_argument_type(Type *ty) {
 }
 
 FunctionType *FunctionType::get(Type *result, std::vector<Type *> params) {
-    return new FunctionType(result, params);
+    return new FunctionType(result, std::move(params));
 }
 
 unsigned FunctionType::get_num_of_args() const { return args_.size(); }

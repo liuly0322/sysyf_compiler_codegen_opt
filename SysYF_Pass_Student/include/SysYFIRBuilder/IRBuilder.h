@@ -61,6 +61,11 @@ class Scope {
     std::vector<std::map<std::string, Value *>> name2func;
 };
 
+extern const std::map<SyntaxTree::BinaryCondOp, CmpInst::CmpOp>
+    binCondOpToCmpOp;
+extern const std::map<SyntaxTree::BinaryCondOp, FCmpInst::CmpOp>
+    binCondOpToFCmpOp;
+
 struct BinOp {
     union {
         SyntaxTree::BinOp bin_op;
@@ -127,60 +132,39 @@ class IRBuilder : public SyntaxTree::Visitor {
         auto *TyFloat = Type::get_float_type(module.get());
         auto *TyFloatPtr = Type::get_float_ptr_type(module.get());
 
-        auto *input_type = FunctionType::get(TyInt32, {});
-        auto *get_int = Function::create(input_type, "get_int", module.get());
+        auto *type = FunctionType::get(TyInt32, {});
+        auto *get_int = Function::create(type, "get_int", module.get());
 
-        input_type = FunctionType::get(TyFloat, {});
-        auto *get_float =
-            Function::create(input_type, "get_float", module.get());
+        type = FunctionType::get(TyFloat, {});
+        auto *get_float = Function::create(type, "get_float", module.get());
 
-        input_type = FunctionType::get(TyInt32, {});
-        auto *get_char = Function::create(input_type, "get_char", module.get());
+        type = FunctionType::get(TyInt32, {});
+        auto *get_char = Function::create(type, "get_char", module.get());
 
-        std::vector<Type *> input_params;
-        std::vector<Type *>().swap(input_params);
-        input_params.push_back(TyInt32Ptr);
-        input_type = FunctionType::get(TyInt32, input_params);
+        type = FunctionType::get(TyInt32, {TyInt32Ptr});
         auto *get_int_array =
-            Function::create(input_type, "get_int_array", module.get());
+            Function::create(type, "get_int_array", module.get());
 
-        std::vector<Type *>().swap(input_params);
-        input_params.push_back(TyFloatPtr);
-        input_type = FunctionType::get(TyInt32, input_params);
+        type = FunctionType::get(TyInt32, {TyFloatPtr});
         auto *get_float_array =
-            Function::create(input_type, "get_float_array", module.get());
+            Function::create(type, "get_float_array", module.get());
 
-        std::vector<Type *> output_params;
-        std::vector<Type *>().swap(output_params);
-        output_params.push_back(TyInt32);
-        auto *output_type = FunctionType::get(TyVoid, output_params);
-        auto *put_int = Function::create(output_type, "put_int", module.get());
+        type = FunctionType::get(TyVoid, {TyInt32});
+        auto *put_int = Function::create(type, "put_int", module.get());
 
-        std::vector<Type *>().swap(output_params);
-        output_params.push_back(TyFloat);
-        output_type = FunctionType::get(TyVoid, output_params);
-        auto *put_float =
-            Function::create(output_type, "put_float", module.get());
+        type = FunctionType::get(TyVoid, {TyFloat});
+        auto *put_float = Function::create(type, "put_float", module.get());
 
-        std::vector<Type *>().swap(output_params);
-        output_params.push_back(TyInt32);
-        output_type = FunctionType::get(TyVoid, output_params);
-        auto *put_char =
-            Function::create(output_type, "put_char", module.get());
+        type = FunctionType::get(TyVoid, {TyInt32});
+        auto *put_char = Function::create(type, "put_char", module.get());
 
-        std::vector<Type *>().swap(output_params);
-        output_params.push_back(TyInt32);
-        output_params.push_back(TyInt32Ptr);
-        output_type = FunctionType::get(TyVoid, output_params);
+        type = FunctionType::get(TyVoid, {TyInt32, TyInt32Ptr});
         auto *put_int_array =
-            Function::create(output_type, "put_int_array", module.get());
+            Function::create(type, "put_int_array", module.get());
 
-        std::vector<Type *>().swap(output_params);
-        output_params.push_back(TyInt32);
-        output_params.push_back(TyFloatPtr);
-        output_type = FunctionType::get(TyVoid, output_params);
+        type = FunctionType::get(TyVoid, {TyInt32, TyFloatPtr});
         auto *put_float_array =
-            Function::create(output_type, "put_float_array", module.get());
+            Function::create(type, "put_float_array", module.get());
 
         scope.enter();
         scope.push("getint", get_int);

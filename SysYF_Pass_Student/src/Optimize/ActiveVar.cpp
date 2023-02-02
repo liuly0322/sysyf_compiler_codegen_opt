@@ -3,38 +3,31 @@
 
 #include <algorithm>
 
-BasicBlock *ActiveVar::findExitBlock(Function *f) {
-    for (auto *bb : f->get_basic_blocks()) {
-        auto *terminate_instr = bb->get_terminator();
-        if (terminate_instr->is_ret())
-            return bb;
+void ActiveVar::addPhiFrom(std::set<Value *> &set, BasicBlock *dst,
+                           BasicBlock *src) {
+    for (auto *inst : dst->get_instructions()) {
+        if (!inst->is_phi())
+            break;
+        const int phi_size = inst->get_num_operand() / 2;
+        for (int i = 0; i < phi_size; i++) {
+            auto *block =
+                dynamic_cast<BasicBlock *>(inst->get_operand(2 * i + 1));
+            if (src != nullptr && block != src)
+                continue;
+            auto *active_var = inst->get_operand(2 * i);
+            if (localOp(active_var))
+                set.insert(active_var);
+        }
     }
-    return nullptr;
 }
 
 std::set<Value *> ActiveVar::calcOut(BasicBlock *bb) {
-    if (bb == exit_block)
-        return {};
-
     auto out_bb = OUT[bb];
     for (auto *succ_bb : bb->get_succ_basic_blocks()) {
         for (auto *value : IN[succ_bb]) {
             out_bb.insert(value);
         }
-        for (auto *inst : succ_bb->get_instructions()) {
-            if (!inst->is_phi())
-                break;
-            const int phi_size = inst->get_num_operand() / 2;
-            for (int i = 0; i < phi_size; i++) {
-                auto *block =
-                    dynamic_cast<BasicBlock *>(inst->get_operand(2 * i + 1));
-                if (block == bb) {
-                    auto *active_var = inst->get_operand(2 * i);
-                    if (localOp(active_var))
-                        out_bb.insert(active_var);
-                }
-            }
-        }
+        addPhiFrom(out_bb, succ_bb, bb);
     }
     return out_bb;
 }
@@ -79,7 +72,6 @@ void ActiveVar::calcInOut(Function *f) {
 }
 
 void ActiveVar::checkFun(Function *f) {
-    exit_block = findExitBlock(f);
     IN.clear();
     OUT.clear();
     do {
@@ -89,19 +81,9 @@ void ActiveVar::checkFun(Function *f) {
 
     auto blocks = f->get_basic_blocks();
     for (auto *bb : blocks) {
-        for (auto *inst : bb->get_instructions()) {
-            if (!inst->is_phi())
-                break;
-            const int phi_size = inst->get_num_operand() / 2;
-            for (int i = 0; i < phi_size; i++) {
-                auto *active_var = inst->get_operand(2 * i);
-                if (localOp(active_var)) {
-                    IN[bb].insert(active_var);
-                }
-            }
-        }
-        bb->set_live_in(IN[bb]);
-        bb->set_live_out(OUT[bb]);
+        addPhiFrom(IN[bb], bb);
+        bb->set_live_in(std::move(IN[bb]));
+        bb->set_live_out(std::move(OUT[bb]));
     }
 }
 

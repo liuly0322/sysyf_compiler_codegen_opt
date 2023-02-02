@@ -16,10 +16,9 @@ class Argument;
 
 class Function : public Value {
   public:
-    Function(FunctionType *ty, const std::string &name, Module *parent);
+    Function(FunctionType *ty, std::string name, Module *parent);
     ~Function();
-    static Function *create(FunctionType *ty, const std::string &name,
-                            Module *parent);
+    static Function *create(FunctionType *ty, std::string name, Module *parent);
 
     [[nodiscard]] FunctionType *get_function_type() const;
 
@@ -68,9 +67,9 @@ class Function : public Value {
 class Argument : public Value {
   public:
     /// Argument constructor.
-    explicit Argument(Type *ty, const std::string &name = "",
-                      Function *f = nullptr, unsigned arg_no = 0)
-        : Value(ty, name), parent_(f), arg_no_(arg_no) {}
+    explicit Argument(Type *ty, std::string name = "", Function *f = nullptr,
+                      unsigned arg_no = 0)
+        : Value(ty, std::move(name)), parent_(f), arg_no_(arg_no) {}
     ~Argument() = default;
 
     [[nodiscard]] inline const Function *get_parent() const { return parent_; }

@@ -1,16 +1,15 @@
 #include "Function.h"
 #include "IRPrinter.h"
 
-Function::Function(FunctionType *ty, const std::string &name, Module *parent)
-    : Value(ty, name), parent_(parent), seq_cnt_(0) {
+Function::Function(FunctionType *ty, std::string name, Module *parent)
+    : Value(ty, std::move(name)), parent_(parent), seq_cnt_(0) {
     // num_args_ = ty->getNumParams();
     parent->add_function(this);
     build_args();
 }
 
-Function *Function::create(FunctionType *ty, const std::string &name,
-                           Module *parent) {
-    return new Function(ty, name, parent);
+Function *Function::create(FunctionType *ty, std::string name, Module *parent) {
+    return new Function(ty, std::move(name), parent);
 }
 
 FunctionType *Function::get_function_type() const {
@@ -31,17 +30,17 @@ Module *Function::get_parent() const { return parent_; }
 
 void Function::remove(BasicBlock *bb) {
     basic_blocks_.remove(bb);
-    for (auto pre : bb->get_pre_basic_blocks()) {
+    for (auto *pre : bb->get_pre_basic_blocks()) {
         pre->remove_succ_basic_block(bb);
     }
-    for (auto succ : bb->get_succ_basic_blocks()) {
+    for (auto *succ : bb->get_succ_basic_blocks()) {
         succ->remove_pre_basic_block(bb);
     }
 }
 
 void Function::build_args() {
     auto *func_ty = get_function_type();
-    unsigned num_args = get_num_of_args();
+    auto num_args = get_num_of_args();
     for (auto i = 0U; i < num_args; i++) {
         arguments_.push_back(
             new Argument(func_ty->get_param_type(i), "", this, i));
@@ -52,7 +51,7 @@ void Function::add_basic_block(BasicBlock *bb) { basic_blocks_.push_back(bb); }
 
 void Function::set_instr_name() {
     std::map<Value *, int> seq;
-    for (auto arg : this->get_args()) {
+    for (auto *arg : this->get_args()) {
         if (seq.find(arg) == seq.end()) {
             auto seq_num = seq.size() + seq_cnt_;
             if (arg->set_name("arg" + std::to_string(seq_num))) {
@@ -60,14 +59,14 @@ void Function::set_instr_name() {
             }
         }
     }
-    for (auto bb : basic_blocks_) {
+    for (auto *bb : basic_blocks_) {
         if (seq.find(bb) == seq.end()) {
             auto seq_num = seq.size() + seq_cnt_;
             if (bb->set_name("label" + std::to_string(seq_num))) {
                 seq.insert({bb, seq_num});
             }
         }
-        for (auto instr : bb->get_instructions()) {
+        for (auto *instr : bb->get_instructions()) {
             if (!instr->is_void() && seq.find(instr) == seq.end()) {
                 auto seq_num = seq.size() + seq_cnt_;
                 if (instr->set_name("op" + std::to_string(seq_num))) {
@@ -96,7 +95,7 @@ std::string Function::print() {
     // print arg
     if (this->is_declaration()) {
         for (auto i = 0U; i < this->get_num_of_args(); i++) {
-            if (i)
+            if (i != 0)
                 func_ir += ", ";
             func_ir += static_cast<FunctionType *>(this->get_type())
                            ->get_param_type(i)
@@ -118,7 +117,7 @@ std::string Function::print() {
     } else {
         func_ir += " {";
         func_ir += "\n";
-        for (auto bb : this->get_basic_blocks()) {
+        for (auto *bb : this->get_basic_blocks()) {
             func_ir += bb->print();
         }
         func_ir += "}";

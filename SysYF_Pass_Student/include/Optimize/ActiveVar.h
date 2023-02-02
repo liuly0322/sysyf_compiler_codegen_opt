@@ -14,7 +14,6 @@ class ActiveVar : public Pass {
   private:
     const std::string name = "ActiveVar";
 
-    BasicBlock *exit_block;
     bool changed;
     std::set<Value *> def;
     std::set<Value *> use;
@@ -22,9 +21,11 @@ class ActiveVar : public Pass {
     std::map<BasicBlock *, std::set<Value *>> OUT;
 
     static bool localOp(Value *value) {
-        return dynamic_cast<GlobalVariable *>(value) == nullptr;
+        return dynamic_cast<Instruction *>(value) != nullptr ||
+               dynamic_cast<Argument *>(value) != nullptr;
     }
-    static BasicBlock *findExitBlock(Function *f);
+    static void addPhiFrom(std::set<Value *> &set, BasicBlock *dst,
+                           BasicBlock *src = nullptr);
     void calcDefUse(BasicBlock *bb);
     std::set<Value *> calcIn(BasicBlock *bb);
     std::set<Value *> calcOut(BasicBlock *bb);

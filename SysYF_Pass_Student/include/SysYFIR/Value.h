@@ -17,7 +17,8 @@ struct Use {
 
 class Value {
   public:
-    explicit Value(Type *ty, const std::string &name = "");
+    explicit Value(Type *ty, std::string name = "")
+        : type_(ty), name_(std::move(name)){};
     ~Value() = default;
 
     [[nodiscard]] Type *get_type() const { return type_; }

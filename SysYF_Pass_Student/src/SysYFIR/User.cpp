@@ -4,8 +4,8 @@
 #include <cassert>
 #endif
 
-User::User(Type *ty, const std::string &name, unsigned num_ops)
-    : Value(ty, name), num_ops_(num_ops) {
+User::User(Type *ty, std::string name, unsigned num_ops)
+    : Value(ty, std::move(name)), num_ops_(num_ops) {
     // if (num_ops_ > 0)
     //   operands_.reset(new std::list<Value *>());
     operands_.resize(num_ops_, nullptr);
@@ -33,7 +33,7 @@ void User::add_operand(Value *v) {
 unsigned User::get_num_operand() const { return num_ops_; }
 
 void User::remove_use_of_ops() {
-    for (auto op : operands_) {
+    for (auto *op : operands_) {
         op->remove_use(this);
     }
 }

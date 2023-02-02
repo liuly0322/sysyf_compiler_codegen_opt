@@ -3,17 +3,19 @@
 
 GlobalVariable::GlobalVariable(std::string name, Module *m, Type *ty,
                                bool is_const, Constant *init)
-    : User(ty, name, init != nullptr), is_const_(is_const), init_val_(init) {
+    : User(ty, std::move(name), static_cast<unsigned int>(init != nullptr)),
+      is_const_(is_const), init_val_(init) {
     m->add_global_variable(this);
-    if (init) {
+    if (init != nullptr) {
         this->set_operand(0, init);
     }
-} // global操作数为initval
+}
 
 GlobalVariable *GlobalVariable::create(std::string name, Module *m, Type *ty,
                                        bool is_const,
                                        Constant *init = nullptr) {
-    return new GlobalVariable(name, m, PointerType::get(ty), is_const, init);
+    return new GlobalVariable(std::move(name), m, PointerType::get(ty),
+                              is_const, init);
 }
 
 std::string GlobalVariable::print() {

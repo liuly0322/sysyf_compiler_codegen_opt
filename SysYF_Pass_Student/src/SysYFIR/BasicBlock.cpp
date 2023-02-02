@@ -5,9 +5,9 @@
 #endif
 #include <algorithm>
 
-BasicBlock::BasicBlock(Module *m, const std::string &name = "",
+BasicBlock::BasicBlock(Module *m, std::string name = "",
                        Function *parent = nullptr)
-    : Value(Type::get_label_type(m), name), parent_(parent) {
+    : Value(Type::get_label_type(m), std::move(name)), parent_(parent) {
 #ifdef DEBUG
     assert(parent && "currently parent should not be nullptr");
 #endif
@@ -91,19 +91,19 @@ std::string BasicBlock::print() {
     if (!this->get_pre_basic_blocks().empty()) {
         bb_ir += "                                                ; preds = ";
     }
-    for (auto bb : this->get_pre_basic_blocks()) {
+    for (auto *bb : this->get_pre_basic_blocks()) {
         if (bb != *this->get_pre_basic_blocks().begin())
             bb_ir += ", ";
         bb_ir += print_as_op(bb, false);
     }
 
     // print prebb
-    if (!this->get_parent()) {
+    if (this->get_parent() == nullptr) {
         bb_ir += "\n";
         bb_ir += "; Error: Block without parent!";
     }
     bb_ir += "\n";
-    for (auto instr : this->get_instructions()) {
+    for (auto *instr : this->get_instructions()) {
         bb_ir += "  ";
         bb_ir += instr->print();
         bb_ir += "\n";

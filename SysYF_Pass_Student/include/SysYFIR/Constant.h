@@ -6,9 +6,8 @@ class Constant : public User {
   private:
     // int value;
   public:
-    explicit Constant(Type *ty, const std::string &name = "",
-                      unsigned num_ops = 0)
-        : User(ty, name, num_ops) {}
+    explicit Constant(Type *ty, std::string name = "", unsigned num_ops = 0)
+        : User(ty, std::move(name), num_ops) {}
     ~Constant() = default;
 };
 

@@ -7,11 +7,11 @@ std::string print_as_op(Value *v, bool print_ty) {
         op_ir += " ";
     }
 
-    if (dynamic_cast<GlobalVariable *>(v)) {
+    if (dynamic_cast<GlobalVariable *>(v) != nullptr) {
         op_ir += "@" + v->get_name();
-    } else if (dynamic_cast<Function *>(v)) {
+    } else if (dynamic_cast<Function *>(v) != nullptr) {
         op_ir += "@" + v->get_name();
-    } else if (dynamic_cast<Constant *>(v)) {
+    } else if (dynamic_cast<Constant *>(v) != nullptr) {
         op_ir += v->print();
     } else {
         op_ir += "%" + v->get_name();

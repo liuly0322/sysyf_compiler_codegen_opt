@@ -1,6 +1,6 @@
 #include "Module.h"
 
-Module::Module(std::string name) : module_name_(name) {
+Module::Module(std::string name) : module_name_(std::move(name)) {
     void_ty_ = new Type(Type::VoidTyID, this);
     label_ty_ = new Type(Type::LabelTyID, this);
     int1_ty_ = new IntegerType(1, this);
@@ -85,19 +85,18 @@ std::list<GlobalVariable *> &Module::get_global_variable() {
 }
 
 void Module::set_print_name() {
-    for (auto func : this->get_functions()) {
+    for (auto *func : this->get_functions()) {
         func->set_instr_name();
     }
-    return;
 }
 
 std::string Module::print() {
     std::string module_ir;
-    for (auto global_val : this->global_list_) {
+    for (auto *global_val : this->global_list_) {
         module_ir += global_val->print();
         module_ir += "\n";
     }
-    for (auto func : this->function_list_) {
+    for (auto *func : this->function_list_) {
         module_ir += func->print();
         module_ir += "\n";
     }

@@ -7,7 +7,7 @@
 
 class User : public Value {
   public:
-    explicit User(Type *ty, const std::string &name = "", unsigned num_ops = 0);
+    explicit User(Type *ty, std::string name = "", unsigned num_ops = 0);
     ~User() = default;
 
     std::vector<Value *> &get_operands();
