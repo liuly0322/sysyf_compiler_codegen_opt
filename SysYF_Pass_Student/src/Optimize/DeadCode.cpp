@@ -271,8 +271,10 @@ void Cleaner::eliminateEmptyBlock(BasicBlock *i, BasicBlock *j) {
 }
 
 void Cleaner::combineBasicBlocks(BasicBlock *i, BasicBlock *j) {
-    if (i == f_->get_entry_block())
-        return;
+    if (i == f_->get_entry_block()) {
+        f_->get_basic_blocks().remove(j);
+        f_->get_basic_blocks().front() = j;
+    }
 
     cleaned = true, ever_cleaned = true;
 
