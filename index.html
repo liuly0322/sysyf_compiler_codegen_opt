@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SysYF-Compiler-CodeGenOpt</title>
+</head>
+<style>
+  blockquote {
+    margin: 16px 0;
+    border-left: 2px solid #ccc;
+    padding-left: 16px;
+    transition: border-color 0.5s;
+  }
+
+  blockquote>p {
+    margin: 1em 0;
+    font-size: 16px;
+    color: rgba(60, 60, 60, 0.7);
+    transition: color 0.5s;
+  }
+
+  button {
+    padding: 5px 10px;
+    border-radius: 2px;
+    font-weight: bold;
+    font-size: 9pt;
+    outline: none;
+    color: white;
+    background: #4C8FFB;
+    border: 1px #3079ED solid;
+    box-shadow: inset 0 1px 0 #80B0FB;
+  }
+
+  button:hover {
+    border: 1px #2F5BB7 solid;
+    box-shadow: 0 1px 1px #EAEAEA, inset 0 1px 0 #5A94F1;
+    background: #3F83F1;
+  }
+
+  button:active {
+    box-shadow: inset 0 2px 5px #2370FE;
+  }
+
+  #output {
+    white-space: pre-wrap;
+    background-color: #eee;
+    height: calc(100vh - 3.5em);
+    overflow: auto
+  }
+
+  #output>del {
+    text-decoration: none;
+    color: #b30000;
+    background: #fadad7;
+  }
+
+  #output>ins {
+    background: #eaf2c2;
+    color: #406619;
+    text-decoration: none;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+  }
+
+  .container {
+    width: 992px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .opt {
+    display: inline-block;
+  }
+
+  .placeholder {
+    color: rgba(60, 60, 60, 0.7);
+  }
+
+  @media screen and (min-width: 992px) {
+    .body {
+      display: block;
+    }
+
+    .container {
+      columns: 2;
+      width: 100%;
+    }
+
+    .column {
+      break-inside: avoid;
+      margin: 0 1em;
+    }
+
+    pre {
+      padding: 1em;
+    }
+
+    textarea {
+      height: calc(100vh - 30em);
+    }
+  }
+</style>
+
+<body>
+  <div class="container">
+    <div class="column">
+      <div class="header">
+        <h1>SysYF IR Opt</h1>
+        <a href="https://github.com/liuly0322/sysyf_compiler_codegen_opt" target="_blank"
+          style="color: black; text-decoration: none;"><svg width="1.2em" height="1.2em"
+            preserveAspectRatio="xMidYMid meet" viewBox="0 0 1024 1024" style="font-size: xx-large;">
+            <path fill="currentColor"
+              d="M511.6 76.3C264.3 76.2 64 276.4 64 523.5C64 718.9 189.3 885 363.8 946c23.5 5.9 19.9-10.8 19.9-22.2v-77.5c-135.7 15.9-141.2-73.9-150.3-88.9C215 726 171.5 718 184.5 703c30.9-15.9 62.4 4 98.9 57.9c26.4 39.1 77.9 32.5 104 26c5.7-23.5 17.9-44.5 34.7-60.8c-140.6-25.2-199.2-111-199.2-213c0-49.5 16.3-95 48.3-131.7c-20.4-60.5 1.9-112.3 4.9-120c58.1-5.2 118.5 41.6 123.2 45.3c33-8.9 70.7-13.6 112.9-13.6c42.4 0 80.2 4.9 113.5 13.9c11.3-8.6 67.3-48.8 121.3-43.9c2.9 7.7 24.7 58.3 5.5 118c32.4 36.8 48.9 82.7 48.9 132.3c0 102.2-59 188.1-200 212.9a127.5 127.5 0 0 1 38.1 91v112.5c.8 9 0 17.9 15 17.9c177.1-59.7 304.6-227 304.6-424.1c0-247.2-200.4-447.3-447.5-447.3z">
+            </path>
+          </svg></a>
+      </div>
+      <p id="hint" style="color:#0095d9;">正在加载 wasm（部分设备可能不支持）。。。</p>
+      <blockquote>
+        <p>
+          SysYF 语言是 C 语言的一个子集，只有一维数组，没有指针，没有 for 语句。
+        </p>
+        <p>本页面基于 WebAssembly，在浏览器端展示对 SysYF 语言前端生成的 LLVM IR 的优化效果。</p>
+      </blockquote>
+      <fieldset style="margin: 1em 0;">
+        <legend>选择开启的优化：</legend>
+        <div class="opt">
+          <input type="checkbox" id="sccp" name="sccp" checked />
+          <label for="scales">稀疏条件常量传播</label>
+        </div>
+        <div class="opt">
+          <input type="checkbox" id="cse" name="cse" checked />
+          <label for="horns">公共子表达式删除</label>
+        </div>
+        <div class="opt">
+          <input type="checkbox" id="dce" name="dce" checked />
+          <label for="horns">死代码消除</label>
+        </div>
+      </fieldset>
+      <textarea name="sy_code" id="sy_code" rows="20" style="width: 100%; margin: 1em 0;">int sum_of_two_elements(int a[]) {
+    return a[0] + a[1];
+}
+
+int sum_of_three_elements(int a[]) {
+    return a[0] + a[1] + a[2];
+}
+
+int main() {
+    int a[3] = {1, 1, 4};
+
+    // main 的返回值。纯函数调用，不会注销数组元素的 store 定值
+    int ret = sum_of_two_elements(a);
+    // 无用变量，且是纯函数调用，可以作为死代码消除
+    int useless = sum_of_three_elements(a);
+
+    // 经过公共子表达式消除（store-load 转发），数组元素的值是确定的
+    // 再经常量传播计算出实参
+    putint(114514 + a[0] + a[1] + a[2]);
+    putch(10);
+
+    // 同理经过公共子表达式消除和常量传播后，可以判断此处是无用控制流
+    // 因此作为死代码消除
+    if (a[0] != 1) {
+        a[1] = 114514;
+        return 0;
+    }
+    
+    // 再次检验 store-load 转发
+    a[0] = -114514;
+    putint(114514 + a[0] + a[1] + a[2]);
+    putch(10);
+
+    return ret;   
+}
+      </textarea>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div>展示差别：<input type="checkbox" name="diff" id="diff" checked></div>
+        <button id="btn" onclick="btnClick()" disabled="true">编译</button>
+      </div>
+    </div>
+    <pre id="output" class="column"><span class="placeholder">点击编译按钮，结果将在此处展示。。。</span></pre>
+  </div>
+  <script src="diff.min.js"></script>
+  <script>
+    let output_message = ''
+      ;
+    (() => {
+      const append_out = (str) => { output_message += str }
+      console.log = append_out
+      console.warn = append_out
+    })()
+  </script>
+  <script src="compiler.js"></script>
+  <script>
+    const btn = document.getElementById('btn')
+    const output = document.getElementById('output')
+
+    function compile(sccp, cse, dce) {
+      const str = document.getElementById('sy_code').value
+
+      const strBuffer = new TextEncoder().encode(str)
+      const strPointer = Module._malloc(strBuffer.length + 1)
+      Module.HEAPU8.set(strBuffer, strPointer)
+      Module.HEAPU8[strPointer + strBuffer.length] = 0
+
+      const outPointer = Module._compile(strPointer, sccp, cse, dce)
+
+      Module._free(strPointer)
+
+      return UTF8ToString(outPointer)
+    }
+
+    function render(unoptimized, optimized) {
+      const diff = Diff.diffLines(unoptimized, optimized)
+      const fragment = document.createDocumentFragment()
+      for (let i = 0; i < diff.length; i++) {
+        if (diff[i].added && diff[i + 1]?.removed) {
+          [diff[i], diff[i + 1]] = [diff[i + 1], diff[i]]
+        }
+
+        let node
+        if (diff[i].removed) {
+          node = document.createElement('del')
+          node.appendChild(document.createTextNode(diff[i].value))
+        } else if (diff[i].added) {
+          node = document.createElement('ins')
+          node.appendChild(document.createTextNode(diff[i].value))
+        } else {
+          node = document.createTextNode(diff[i].value)
+        }
+        fragment.appendChild(node)
+      }
+
+      output.textContent = ''
+      output.appendChild(fragment)
+    }
+
+    function btnClick() {
+      btn.disabled = true
+      const sccp = Number(document.getElementById('sccp').checked)
+      const cse = Number(document.getElementById('cse').checked)
+      const dce = Number(document.getElementById('dce').checked)
+
+      let optimized
+      try {
+        optimized = compile(sccp, cse, dce)
+      } catch (e) {
+        output.innerHTML = `<span class="placeholder">编译器出现错误，刷新页面以继续编译。\n${output_message}</span>`
+        return
+      }
+
+      const diff = document.getElementById('diff').checked
+      if (diff) {
+        const unoptimized = compile(0, 0, 0)
+        render(unoptimized, optimized)
+      } else {
+        output.innerText = optimized
+      }
+
+      btn.disabled = false
+    }
+
+    Module.onRuntimeInitialized = () => {
+      const hint = document.getElementById('hint')
+      hint.parentNode.removeChild(hint)
+      btn.disabled = false
+    }
+  </script>
+</body>
+
+</html>
